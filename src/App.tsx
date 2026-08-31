@@ -350,13 +350,20 @@ export default function App() {
                             validation.structure.pagesWithWidgetAnnotations > 0
                               ? "campos de formulário em página"
                               : null,
+                            validation.status === "ready" && validation.structure.hasDocumentMetadataStream
+                              ? "metadados do documento"
+                              : null,
+                            validation.status === "ready" && validation.structure.pagesWithLinkAnnotations > 0
+                              ? "links presentes nas páginas"
+                              : null,
                           ]
                             .filter(Boolean)
                             .join(", ")}
                       ) que <strong>cada parte da divisão, sendo um documento novo, pode não
-                      preservar</strong>. Links dentro da própria parte continuam funcionando, mas o
-                      registro do formulário e marcadores/destinos do documento original não são
-                      recriados em cada parte. O resultado não é equivalente ao documento original.
+                      preservar</strong>. Links externos simples podem permanecer, mas links internos e
+                      destinos entre páginas ou partes não são garantidos. O registro do formulário,
+                      marcadores/destinos e os metadados do documento original também não são recriados
+                      em cada parte. O resultado não é equivalente ao documento original.
                     </p>
                     <label className="split-risk-notice__confirm">
                       <input

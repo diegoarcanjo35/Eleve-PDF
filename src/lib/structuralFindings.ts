@@ -28,13 +28,22 @@ export const UNKNOWN_STRUCTURAL_FINDINGS: StructuralFindings = {
   pagesWithWidgetAnnotations: 0,
 };
 
-/** true se houver qualquer estrutura de nível de documento que a divisão não preserva. */
+/**
+ * true se houver qualquer estrutura de nível de documento que a divisão não
+ * preserva com segurança. Inclui `hasDocumentMetadataStream` (metadados globais
+ * do catálogo não são copiados para cada parte) e `pagesWithLinkAnnotations`
+ * (o analisador atual não diferencia com segurança link externo de link
+ * interno/destino entre páginas, então qualquer anotação Link é tratada como
+ * risco, de forma conservadora).
+ */
 export function hasSplitRiskyStructures(findings: StructuralFindings): boolean {
   return (
     !findings.analyzedSuccessfully ||
     findings.hasAcroForm ||
     findings.hasOutlines ||
     findings.hasNamedDestinations ||
-    findings.pagesWithWidgetAnnotations > 0
+    findings.hasDocumentMetadataStream ||
+    findings.pagesWithWidgetAnnotations > 0 ||
+    findings.pagesWithLinkAnnotations > 0
   );
 }
