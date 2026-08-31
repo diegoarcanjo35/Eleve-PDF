@@ -44,7 +44,12 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
     if (request.type === "validate") {
       const bytes = new Uint8Array(request.fileBytes);
       const result = await validatePdfBytes(bytes, request.fileSize);
-      post({ id: request.id, type: "validate-success", pageCount: result.pageCount });
+      post({
+        id: request.id,
+        type: "validate-success",
+        pageCount: result.pageCount,
+        structure: result.structure,
+      });
       return;
     }
 
@@ -62,6 +67,8 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
           id: request.id,
           type: "compress-success",
           bytes: outBuffer,
+          outcome: result.outcome,
+          finalBytes: result.finalBytes,
           imagesFound: result.imagesFound,
           imagesRecompressed: result.imagesRecompressed,
           skips: result.skips,

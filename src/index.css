@@ -432,6 +432,24 @@ button {
   font-weight: 600;
 }
 
+.split-risk-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.split-risk-notice p {
+  margin: 0;
+}
+
+.split-risk-notice__confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .tool-panel__submit {
   align-self: flex-start;
 }

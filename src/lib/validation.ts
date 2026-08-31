@@ -1,6 +1,12 @@
 import * as pdfjsLib from "pdfjs-dist";
+import { PDFDocument } from "pdf-lib";
 import { PdfAppError } from "./errors";
 import { MAX_FILE_SIZE_BYTES, MAX_PAGE_COUNT } from "./limits";
+import {
+  analyzePdfStructure,
+  UNKNOWN_STRUCTURAL_FINDINGS,
+  type StructuralFindings,
+} from "./structuralAnalysis";
 
 const PDF_MAGIC_BYTES = [0x25, 0x50, 0x44, 0x46]; // "%PDF"
 
@@ -12,6 +18,7 @@ export function hasPdfSignature(bytes: Uint8Array): boolean {
 
 export interface ValidatedPdf {
   pageCount: number;
+  structure: StructuralFindings;
 }
 
 /**
@@ -53,7 +60,19 @@ export async function validatePdfBytes(
       throw new PdfAppError("corrupted", "PDF sem páginas legíveis.");
     }
 
-    return { pageCount };
+    let structure: StructuralFindings;
+    try {
+      const libDoc = await PDFDocument.load(bytes, { ignoreEncryption: false });
+      structure = analyzePdfStructure(libDoc);
+    } catch {
+      // A validação principal (pdfjs) já aprovou o arquivo; se só a análise
+      // estrutural adicional falhar, isso nunca deve travar a validação —
+      // apenas resulta em "não sabemos", que a UI trata como potencialmente
+      // arriscado (nunca como "sem estruturas sensíveis").
+      structure = UNKNOWN_STRUCTURAL_FINDINGS;
+    }
+
+    return { pageCount, structure };
   } catch (error) {
     if (error instanceof PdfAppError) throw error;
 

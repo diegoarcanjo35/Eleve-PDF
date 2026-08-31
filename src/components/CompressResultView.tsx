@@ -1,8 +1,10 @@
-import { formatBytes, formatPercent, isReductionSignificant, reductionStats } from "@/lib/format";
+import { formatBytes, formatPercent, reductionStats } from "@/lib/format";
 import type { CompressionLevel } from "@/lib/compressionLevels";
+import type { CompressOutcome } from "@/lib/pdfCompress";
 
 export interface CompressResultData {
   level: CompressionLevel;
+  outcome: CompressOutcome;
   originalBytes: number;
   finalBytes: number;
   imagesFound: number;
@@ -17,8 +19,8 @@ interface CompressResultViewProps {
 }
 
 export function CompressResultView({ result, onDownload }: CompressResultViewProps) {
+  const reduced = result.outcome === "reduced";
   const { reducedBytes, reducedPercent } = reductionStats(result.originalBytes, result.finalBytes);
-  const significant = isReductionSignificant(reducedPercent);
 
   return (
     <div className="result-card" role="status">
@@ -35,7 +37,13 @@ export function CompressResultView({ result, onDownload }: CompressResultViewPro
         <div>
           <dt>Redução</dt>
           <dd>
-            {formatBytes(reducedBytes)} ({formatPercent(reducedPercent)})
+            {reduced ? (
+              <>
+                {formatBytes(reducedBytes)} ({formatPercent(reducedPercent)})
+              </>
+            ) : (
+              "Nenhuma"
+            )}
           </dd>
         </div>
         {result.usedImageRecompression && (
@@ -48,16 +56,16 @@ export function CompressResultView({ result, onDownload }: CompressResultViewPro
         )}
       </dl>
 
-      {!significant && (
+      {!reduced && (
         <p className="notice notice--warning">
-          Este PDF já estava bem otimizado: não houve redução significativa de tamanho neste
-          nível. Isso é esperado para documentos majoritariamente de texto vetorial ou sem
-          imagens recomprimíveis.
+          Este PDF já estava bem otimizado: o processamento não conseguiu reduzir o tamanho de
+          forma real neste nível. O <strong>arquivo original foi mantido</strong>, byte a byte —
+          nunca entregamos uma versão igual ou maior disfarçada de compactação.
         </p>
       )}
 
       <button type="button" className="button button--primary" onClick={onDownload}>
-        Baixar PDF compactado
+        {reduced ? "Baixar PDF compactado" : "Baixar arquivo original"}
       </button>
     </div>
   );

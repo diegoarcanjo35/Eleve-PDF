@@ -1,6 +1,7 @@
-import type { CompressionLevel, CompressProgress } from "@/lib/pdfCompress";
+import type { CompressionLevel, CompressOutcome, CompressProgress } from "@/lib/pdfCompress";
 import type { SplitProgress } from "@/lib/pdfSplit";
 import type { PdfErrorCode } from "@/lib/errors";
+import type { StructuralFindings } from "@/lib/structuralAnalysis";
 
 export interface ValidateRequest {
   id: string;
@@ -44,12 +45,15 @@ export interface ValidateSuccessMessage {
   id: string;
   type: "validate-success";
   pageCount: number;
+  structure: StructuralFindings;
 }
 
 export interface CompressSuccessMessage {
   id: string;
   type: "compress-success";
   bytes: ArrayBuffer;
+  outcome: CompressOutcome;
+  finalBytes: number;
   imagesFound: number;
   imagesRecompressed: number;
   skips: { reason: string; count: number }[];

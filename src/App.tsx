@@ -13,11 +13,12 @@ import { downloadBytes } from "@/lib/download";
 import { partFileName, compressedFileName } from "@/lib/filenames";
 import { zipFiles } from "@/lib/zip";
 import type { CompressionLevel } from "@/lib/compressionLevels";
+import { hasSplitRiskyStructures, type StructuralFindings } from "@/lib/structuralFindings";
 
 type ValidationState =
   | { status: "idle" }
   | { status: "validating" }
-  | { status: "ready"; pageCount: number }
+  | { status: "ready"; pageCount: number; structure: StructuralFindings }
   | { status: "error"; message: string };
 
 type Tool = "compress" | "split";
@@ -31,6 +32,12 @@ export default function App() {
   const [validation, setValidation] = useState<ValidationState>({ status: "idle" });
   const [activeTool, setActiveTool] = useState<Tool>("compress");
   const fileBufferRef = useRef<ArrayBuffer | null>(null);
+  // Identifica a operação de seleção/validação de arquivo "atual". Cada chamada de
+  // handleFileSelected e cada handleRemove incrementam este token; uma validação
+  // assíncrona só pode atualizar o estado se o token ainda for o mais recente no
+  // momento em que ela termina — isso evita que uma resposta atrasada de um
+  // arquivo antigo sobrescreva o estado de um arquivo selecionado depois.
+  const fileTokenRef = useRef(0);
 
   const [compressRunning, setCompressRunning] = useState(false);
   const [compressProgress, setCompressProgress] = useState<{ current: number; total: number } | null>(null);
@@ -44,6 +51,7 @@ export default function App() {
   const [splitError, setSplitError] = useState<string | null>(null);
   const [compressingPartIndex, setCompressingPartIndex] = useState<number | null>(null);
   const splitCancelRef = useRef<(() => void) | null>(null);
+  const [splitRiskAcknowledged, setSplitRiskAcknowledged] = useState(false);
 
   const resetResults = useCallback(() => {
     setCompressRunning(false);
@@ -56,20 +64,25 @@ export default function App() {
     setSplitMaxBytes(null);
     setSplitError(null);
     setCompressingPartIndex(null);
+    setSplitRiskAcknowledged(false);
   }, []);
 
   const handleFileSelected = useCallback(
     async (selected: File) => {
+      const myToken = ++fileTokenRef.current;
       resetResults();
       setFile(selected);
       setValidation({ status: "validating" });
       try {
         const buffer = await selected.arrayBuffer();
-        fileBufferRef.current = buffer;
+        if (fileTokenRef.current !== myToken) return; // arquivo trocado/removido enquanto líamos os bytes
         const { promise } = requestValidate(buffer.slice(0), selected.size);
         const result = await promise;
-        setValidation({ status: "ready", pageCount: result.pageCount });
+        if (fileTokenRef.current !== myToken) return; // resposta atrasada de uma seleção já superada
+        fileBufferRef.current = buffer;
+        setValidation({ status: "ready", pageCount: result.pageCount, structure: result.structure });
       } catch (error) {
+        if (fileTokenRef.current !== myToken) return;
         const appError =
           error instanceof PdfAppError
             ? error
@@ -81,6 +94,7 @@ export default function App() {
   );
 
   const handleRemove = useCallback(() => {
+    fileTokenRef.current += 1; // invalida qualquer validação em andamento
     setFile(null);
     fileBufferRef.current = null;
     setValidation({ status: "idle" });
@@ -104,8 +118,9 @@ export default function App() {
         const bytes = new Uint8Array(response.bytes);
         setCompressResult({
           level,
+          outcome: response.outcome,
           originalBytes: file.size,
-          finalBytes: bytes.byteLength,
+          finalBytes: response.finalBytes,
           imagesFound: response.imagesFound,
           imagesRecompressed: response.imagesRecompressed,
           usedImageRecompression: response.usedImageRecompression,
@@ -126,9 +141,13 @@ export default function App() {
     [file],
   );
 
+  const splitHasRiskyStructures =
+    validation.status === "ready" && hasSplitRiskyStructures(validation.structure);
+
   const handleSplit = useCallback(
     async (maxBytes: number) => {
       if (!fileBufferRef.current || !file) return;
+      if (splitHasRiskyStructures && !splitRiskAcknowledged) return; // defesa extra além do botão desabilitado
       setSplitRunning(true);
       setSplitError(null);
       setSplitParts(null);
@@ -164,7 +183,7 @@ export default function App() {
         splitCancelRef.current = null;
       }
     },
-    [file],
+    [file, splitHasRiskyStructures, splitRiskAcknowledged],
   );
 
   const handleCompressOversizedPart = useCallback(
@@ -279,6 +298,15 @@ export default function App() {
               </button>
             </div>
 
+            {validation.status === "ready" && validation.structure.hasDigitalSignatureFields && (
+              <p className="notice notice--warning">
+                Este PDF contém um campo de assinatura digital. A <strong>aparência</strong> da
+                assinatura pode permanecer no arquivo processado, mas qualquer reserialização ou
+                divisão <strong>invalida sua validade criptográfica</strong> — como acontece em
+                qualquer ferramenta que reescreve um PDF.
+              </p>
+            )}
+
             {activeTool === "compress" && (
               <div role="tabpanel">
                 <CompressPanel disabled={!isReady} running={compressRunning} onCompress={handleCompress} />
@@ -302,7 +330,49 @@ export default function App() {
 
             {activeTool === "split" && (
               <div role="tabpanel">
-                <SplitPanel disabled={!isReady} running={splitRunning} onSplit={handleSplit} />
+                {splitHasRiskyStructures && (
+                  <div className="notice notice--warning split-risk-notice">
+                    <p>
+                      Este PDF possui estruturas de nível de documento (
+                      {validation.status === "ready" && !validation.structure.analyzedSuccessfully
+                        ? "não foi possível analisar completamente a estrutura deste PDF"
+                        : [
+                            validation.status === "ready" && validation.structure.hasAcroForm
+                              ? "formulário (AcroForm)"
+                              : null,
+                            validation.status === "ready" && validation.structure.hasOutlines
+                              ? "marcadores/outline"
+                              : null,
+                            validation.status === "ready" && validation.structure.hasNamedDestinations
+                              ? "destinos nomeados"
+                              : null,
+                            validation.status === "ready" &&
+                            validation.structure.pagesWithWidgetAnnotations > 0
+                              ? "campos de formulário em página"
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(", ")}
+                      ) que <strong>cada parte da divisão, sendo um documento novo, pode não
+                      preservar</strong>. Links dentro da própria parte continuam funcionando, mas o
+                      registro do formulário e marcadores/destinos do documento original não são
+                      recriados em cada parte. O resultado não é equivalente ao documento original.
+                    </p>
+                    <label className="split-risk-notice__confirm">
+                      <input
+                        type="checkbox"
+                        checked={splitRiskAcknowledged}
+                        onChange={(event) => setSplitRiskAcknowledged(event.target.checked)}
+                      />
+                      Entendo o risco e quero continuar mesmo assim
+                    </label>
+                  </div>
+                )}
+                <SplitPanel
+                  disabled={!isReady || (splitHasRiskyStructures && !splitRiskAcknowledged)}
+                  running={splitRunning}
+                  onSplit={handleSplit}
+                />
                 {splitRunning && (
                   <ProgressBar
                     label="Dividindo páginas…"

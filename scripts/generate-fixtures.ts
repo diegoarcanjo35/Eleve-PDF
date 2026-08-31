@@ -8,7 +8,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFArray, PDFDocument, PDFName, PDFString, StandardFonts, rgb } from "pdf-lib";
 import jpeg from "jpeg-js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,7 +34,10 @@ async function addTextPages(doc: PDFDocument, count: number, startingAt = 1) {
   for (let i = 0; i < count; i += 1) {
     const page = doc.addPage([595, 842]);
     const pageNumber = startingAt + i;
-    page.drawText(`ElevePDF — fixture de teste — página ${pageNumber}`, {
+    // O token "pagina-numero-N" (sem acentos, formato estável) é o que os testes
+    // E2E procuram no stream de conteúdo decodificado para confirmar ordem e que
+    // o texto permanece pesquisável (não rasterizado) após processar o PDF.
+    page.drawText(`ElevePDF — fixture de teste — página ${pageNumber} — pagina-numero-${pageNumber}`, {
       x: 50,
       y: 780,
       size: 16,
@@ -99,16 +102,69 @@ async function buildWithImages(pageCount: number) {
 
 async function buildLargeWithUniqueImages(pageCount: number) {
   const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
   for (let i = 0; i < pageCount; i += 1) {
     const page = doc.addPage([595, 842]);
+    // Marca de texto pesquisável e identificável, para os testes E2E poderem
+    // confirmar a ORDEM real das páginas em cada parte gerada (não apenas a
+    // contagem), reabrindo o PDF baixado e extraindo o texto de cada página.
+    page.drawText(`ElevePDF fixture — pagina-numero-${i + 1}`, {
+      x: 40,
+      y: 800,
+      size: 14,
+      font,
+      color: rgb(0.05, 0.08, 0.12),
+    });
     // Cada página recebe uma imagem JPEG DIFERENTE (não reaproveitada), grande o
     // bastante para, sozinha, ultrapassar o piso mínimo de divisão de 64 KB —
-    // usada para demonstrar o caso "página isolada maior que o limite".
+    // usada para demonstrar o caso "página isolada maior que o limite" e para
+    // forçar divisão em múltiplas partes reais dentro dos limites da interface.
     const jpegBytes = synthesizeJpeg(1600, 1200, 90 - i);
     const image = await doc.embedJpg(jpegBytes);
-    const { width, height } = image.scaleToFit(495, 700);
+    const { width, height } = image.scaleToFit(495, 680);
     page.drawImage(image, { x: 50, y: 90, width, height });
   }
+  return doc.save();
+}
+
+async function buildWithSensitiveStructures() {
+  const doc = await PDFDocument.create();
+  const form = doc.getForm();
+  const page1 = doc.addPage([595, 842]);
+  const page2 = doc.addPage([595, 842]);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  page1.drawText("Pagina 1 — com formulario e link", { x: 40, y: 800, size: 14, font });
+  page2.drawText("Pagina 2 — destino do marcador", { x: 40, y: 800, size: 14, font });
+
+  const textField = form.createTextField("nome");
+  textField.addToPage(page1, { x: 40, y: 700, width: 200, height: 24 });
+
+  const linkAnnotDict = doc.context.obj({
+    Type: "Annot",
+    Subtype: "Link",
+    Rect: [40, 750, 200, 770],
+    Border: [0, 0, 0],
+    A: doc.context.obj({ Type: "Action", S: "URI", URI: PDFString.of("https://example.com") }),
+  });
+  const linkAnnotRef = doc.context.register(linkAnnotDict);
+  const currentAnnots = page1.node.get(PDFName.of("Annots"));
+  const annotsArray = currentAnnots instanceof PDFArray ? currentAnnots : (doc.context.obj([]) as PDFArray);
+  annotsArray.push(linkAnnotRef);
+  page1.node.set(PDFName.of("Annots"), annotsArray);
+
+  const outlineItemDict = doc.context.obj({
+    Title: PDFString.of("Capitulo 2"),
+    Dest: doc.context.obj([page2.ref, PDFName.of("Fit")]),
+  });
+  const outlineItemRef = doc.context.register(outlineItemDict);
+  const outlinesDict = doc.context.obj({
+    Type: "Outlines",
+    First: outlineItemRef,
+    Last: outlineItemRef,
+    Count: 1,
+  });
+  doc.catalog.set(PDFName.of("Outlines"), doc.context.register(outlinesDict));
+
   return doc.save();
 }
 
@@ -126,6 +182,9 @@ async function main() {
 
   const largeUniqueImages = await buildLargeWithUniqueImages(5);
   await writeFile(path.join(OUT_DIR, "large-unique-images.pdf"), largeUniqueImages);
+
+  const sensitiveStructures = await buildWithSensitiveStructures();
+  await writeFile(path.join(OUT_DIR, "sensitive-structures.pdf"), sensitiveStructures);
 
   const corruptedSource = await buildSimpleOnePage();
   const corrupted = corruptedSource.slice(0, Math.floor(corruptedSource.length * 0.6));
