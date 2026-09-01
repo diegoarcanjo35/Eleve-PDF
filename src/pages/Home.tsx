@@ -5,6 +5,9 @@ import { ToolCategory } from "@/components/layout/ToolCategory";
 import { getAvailableTools } from "@/toolsRegistry";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { track } from "@/analytics/client";
+import { findSeoPage } from "@shared/seo/pages";
+
+const PAGE_META = findSeoPage("/")!;
 
 const TRUST_ITEMS = [
   { icon: MonitorSmartphone, label: "Processamento no seu dispositivo" },
@@ -20,11 +23,7 @@ const STEPS = [
 ];
 
 export default function Home() {
-  useDocumentMeta(
-    "ElevePDF — Seu PDF no tamanho certo",
-    "Plataforma de ferramentas para PDF: compacte e divida seus arquivos direto no navegador, sem enviar documentos para servidores.",
-    "/",
-  );
+  useDocumentMeta(PAGE_META);
   const availableTools = getAvailableTools();
 
   return (

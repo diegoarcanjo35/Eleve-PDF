@@ -14,15 +14,13 @@ import type { CompressionLevel } from "@/lib/compressionLevels";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { track } from "@/analytics/client";
 import { durationMsToBucket } from "@shared/analytics/events";
+import { findSeoPage } from "@shared/seo/pages";
 
 const TOOL_ID = "compactar-pdf" as const;
+const PAGE_META = findSeoPage("/compactar-pdf")!;
 
 export default function CompressPage() {
-  useDocumentMeta(
-    "Compactar PDF — ElevePDF",
-    "Reduza o tamanho do seu PDF direto no navegador, sem enviar o arquivo para servidores. Nunca entrega uma versão maior que o original.",
-    "/compactar-pdf",
-  );
+  useDocumentMeta(PAGE_META);
 
   useEffect(() => {
     track("tool_open", { tool_id: TOOL_ID });

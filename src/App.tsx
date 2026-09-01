@@ -11,6 +11,8 @@ import { usePageView } from "@/analytics/usePageView";
 const CompressPage = lazy(() => import("@/pages/CompressPage"));
 const SplitPage = lazy(() => import("@/pages/SplitPage"));
 const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
+const TermsPage = lazy(() => import("@/pages/TermsPage"));
+const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
 // Painel privado — não listado em nenhum menu/registro/sitemap (ver o
 // comentário no topo do componente). Protegido de verdade pelo endpoint,
 // não pela obscuridade desta rota.
@@ -37,7 +39,9 @@ export default function App() {
           <Route path="/compactar-pdf" element={<CompressPage />} />
           <Route path="/dividir-pdf-por-tamanho" element={<SplitPage />} />
           <Route path="/privacidade" element={<PrivacyPage />} />
+          <Route path="/termos-de-uso" element={<TermsPage />} />
           <Route path="/admin/analytics" element={<AnalyticsDashboard />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </AppShell>

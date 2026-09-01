@@ -24,6 +24,9 @@ export function Footer() {
           <Link className="site-footer__link" to="/privacidade">
             Privacidade e métricas
           </Link>
+          <Link className="site-footer__link" to="/termos-de-uso">
+            Termos de Uso
+          </Link>
         </p>
       </div>
     </footer>

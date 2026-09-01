@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && tsx scripts/generateSeoHtml.ts",
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc -b --noEmit && tsc -p tsconfig.functions.json",
@@ -14,6 +14,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "gen:fixtures": "tsx scripts/generate-fixtures.ts",
+    "gen:social-assets": "tsx scripts/generateSocialAssets.ts",
+    "verify:seo": "tsx scripts/verifySeoHtml.ts",
     "d1:migrate:local": "wrangler d1 migrations apply elevepdf-analytics --local"
   },
   "dependencies": {

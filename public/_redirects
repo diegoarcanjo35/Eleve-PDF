@@ -1,1 +1,16 @@
-/* /index.html 200
+# O ElevePDF gera um arquivo HTML estático por rota conhecida durante o build
+# (ver scripts/generateSeoHtml.ts) — dist/compactar-pdf.html,
+# dist/dividir-pdf-por-tamanho.html, dist/privacidade.html,
+# dist/termos-de-uso.html e dist/admin/analytics.html, além de dist/index.html
+# para "/". O Cloudflare Pages resolve automaticamente uma requisição para
+# "/compactar-pdf" no arquivo "compactar-pdf.html" (correspondência direta,
+# HTTP 200, sem redirecionamento) — nenhuma regra é necessária aqui para essas
+# rotas.
+#
+# Deliberadamente SEM a regra "/* /index.html 200": isso faria qualquer URL
+# desconhecida responder 200 com o conteúdo da Home (soft 404), o que o
+# Cloudflare Pages trataria como "página existe" mesmo quando não existe.
+# Em vez disso, dist/404.html (nome especial reconhecido nativamente pelo
+# Cloudflare Pages) é servido automaticamente, com status HTTP 404 real, para
+# qualquer requisição que não bate em nenhum arquivo estático — sem precisar
+# de nenhuma regra explícita aqui.

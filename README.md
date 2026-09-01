@@ -140,9 +140,9 @@ Cada parte gerada pela divisão é um **documento PDF novo**, montado com `PDFDo
 
 ---
 
-## O que este MVP não faz (por escopo, não por limitação técnica)
+## O que este projeto não faz (por escopo, não por limitação técnica)
 
-Conforme o pedido original: sem deploy em produção, sem domínio, sem login, sem cobrança, sem banco de dados, sem outras ferramentas de PDF (juntar, assinar, converter, editar), sem analytics, sem coleta de nome/conteúdo/tamanho associado a identidade dos arquivos do usuário.
+Sem login, sem cobrança, sem outras ferramentas de PDF além de compactar/dividir (juntar, assinar, converter, editar), sem coleta de nome/conteúdo/tamanho associado à identidade dos arquivos do usuário. O único backend existente é o Analytics próprio descrito abaixo — não há nenhum outro serviço de servidor.
 
 ---
 
@@ -150,7 +150,120 @@ Conforme o pedido original: sem deploy em produção, sem domínio, sem login, s
 
 > Seus arquivos são processados no seu dispositivo e não ficam armazenados em nossos servidores.
 
-Essa frase é tecnicamente verdadeira nesta implementação: não existe backend, nenhum arquivo do usuário trafega pela rede, e os bytes só existem na memória do navegador durante o processamento.
+Essa frase é tecnicamente verdadeira nesta implementação: não existe backend de processamento de PDF, nenhum arquivo do usuário trafega pela rede, e os bytes só existem na memória do navegador durante o processamento. Detalhes completos (inclusive sobre o Analytics próprio) estão na página [`/privacidade`](src/pages/PrivacyPage.tsx).
+
+---
+
+## Domínio oficial e rotas públicas
+
+Domínio de produção: **https://elevepdf.elevesites.com.br**
+
+| Rota | Indexável | Descrição |
+|---|---|---|
+| `/` | Sim | Home — apresentação e acesso às ferramentas |
+| `/compactar-pdf` | Sim | Ferramenta de compactação |
+| `/dividir-pdf-por-tamanho` | Sim | Ferramenta de divisão por tamanho |
+| `/privacidade` | Sim | Privacidade e controle de consentimento do Analytics |
+| `/termos-de-uso` | Sim | Termos de uso |
+| `/admin/analytics` | **Não** — `noindex, nofollow`, fora do sitemap/menu | Painel privado de métricas, protegido por Cloudflare Access no endpoint (ver "Analytics próprio" abaixo) |
+| qualquer outra | **Não** — `noindex, nofollow` | 404 real (`dist/404.html`, ver "SEO estático por rota") |
+
+---
+
+## SEO estático por rota (sem SSR completo)
+
+Cada rota pública recebe título, descrição, canonical absoluto, `robots`, Open Graph, Twitter Card e um JSON-LD `WebApplication` já presentes no **HTML inicial**, antes de qualquer JavaScript rodar — importante para crawlers que só leem o HTML bruto (WhatsApp, alguns indexadores). Não é SSR: o React continua rodando 100% no cliente; o que existe é um HTML por rota, gerado no build.
+
+- Fonte única de verdade dos metadados: [`shared/seo/pages.ts`](shared/seo/pages.ts) (título/descrição/robots/canonical por rota) e [`shared/seo/structuredData.ts`](shared/seo/structuredData.ts) (JSON-LD). O mesmo dado é usado tanto pelo React em runtime (`useDocumentMeta`, cobre navegação SPA) quanto pelo script de build abaixo — nunca duplicado como texto solto em dois lugares.
+- Geração: depois de `vite build`, o script [`scripts/generateSeoHtml.ts`](scripts/generateSeoHtml.ts) lê o `dist/index.html` gerado e escreve uma cópia por rota com os metadados corretos:
+  - `dist/index.html` → `/`
+  - `dist/compactar-pdf.html` → `/compactar-pdf`
+  - `dist/dividir-pdf-por-tamanho.html` → `/dividir-pdf-por-tamanho`
+  - `dist/privacidade.html` → `/privacidade`
+  - `dist/termos-de-uso.html` → `/termos-de-uso`
+  - `dist/admin/analytics.html` → `/admin/analytics` (metadados corretos, mas `noindex, nofollow`)
+  - `dist/404.html` → nome especial reconhecido nativamente pelo Cloudflare Pages, servido com **HTTP 404 real** para qualquer rota desconhecida
+  - Arquivos são `<rota>.html` (não `<rota>/index.html`) de propósito: no Cloudflare Pages isso resolve a requisição para `/compactar-pdf` por correspondência direta (200, sem redirecionamento) — importante para o canonical apontar exatamente para a URL que responde.
+- Já roda como parte de `npm run build` (ver "Comandos" abaixo). Para gerar sozinho depois de um build existente: `npx tsx scripts/generateSeoHtml.ts`.
+- Comprovação automatizada: `npm run verify:seo` lê os HTMLs gerados em `dist/` como texto puro (sem executar JavaScript) e falha se faltar algum metadado obrigatório ou se algum canonical/OG apontar para localhost/preview em vez do domínio oficial.
+
+### Imagem Open Graph e favicons
+
+- `public/og-elevepdf.png` — 1200×630, usada em `og:image`/`twitter:image` em todas as rotas públicas.
+- `public/favicon.svg` — ícone principal (referenciado no `<head>`).
+- `public/apple-touch-icon.png` — 180×180, para iOS/homescreen.
+- Gerados de forma reprodutível (sem nova dependência de produção) com o Playwright já usado nos testes E2E: `npm run gen:social-assets` (roda [`scripts/generateSocialAssets.ts`](scripts/generateSocialAssets.ts), que renderiza HTML puro em viewports do tamanho exato e tira um screenshot PNG).
+- Não foi gerado um `favicon.ico` multi-resolução — geração confiável desse formato exigiria uma dependência nova só para isso; navegadores modernos usam o `favicon.svg` normalmente.
+
+### `robots.txt` e `sitemap.xml`
+
+- `public/robots.txt`: permite indexação (`Allow: /`) e aponta para `https://elevepdf.elevesites.com.br/sitemap.xml`. Não usa `Disallow` como proteção de segurança — a rota `/admin/analytics` fica de fora do sitemap e da navegação, mas a proteção real dos dados é o endpoint (`/api/analytics/summary`) validando o JWT do Cloudflare Access no servidor, nunca a obscuridade da URL.
+- `public/sitemap.xml`: lista só as cinco rotas públicas indexáveis. Sem `admin`, sem `404`, sem parâmetros, sem `localhost`/preview. Sem `lastmod` (o processo de build não tem como mantê-lo corretamente sem inventar uma data).
+
+### `public/_redirects`
+
+Sem a regra `/* /index.html 200` (que produziria soft-404 para qualquer URL desconhecida). O Cloudflare Pages resolve as rotas conhecidas pelos arquivos `<rota>.html` gerados no build, e serve `404.html` automaticamente, com status HTTP 404 real, para qualquer rota que não bate em nenhum arquivo — sem precisar de nenhuma regra explícita.
+
+---
+
+## Analytics próprio (Cloudflare Pages Functions + D1)
+
+O único backend do projeto — analytics privado e pseudônimo, com consentimento explícito. Nunca ativo por padrão: sem aceite, `track()` é um no-op completo.
+
+- **Consentimento**: banner com duas ações de peso visual idêntico (aceitar/recusar), revisável a qualquer momento em `/privacidade`. Escolha guardada em `localStorage`; sessão pseudônima (`crypto.randomUUID()`) guardada em `sessionStorage`, limpa imediatamente ao revogar.
+- **Taxonomia fechada**: eventos, parâmetros e valores validados contra listas fechadas em [`shared/analytics/events.ts`](shared/analytics/events.ts) — o mesmo arquivo usado pelo cliente e pelo endpoint.
+- **Endpoint público** `POST /api/analytics/event` ([`functions/api/analytics/event.ts`](functions/api/analytics/event.ts)): valida Origin/Host, `Content-Type`, tamanho do corpo, aplica rate limit por IP, e sempre atribui `occurred_at` no servidor (nunca confia em data vinda do cliente).
+- **Painel privado** `GET /api/analytics/summary` ([`functions/api/analytics/summary.ts`](functions/api/analytics/summary.ts)): só dados agregados; toda resposta (sucesso ou erro) inclui `Cache-Control: no-store`. Protegido por validação real do JWT do Cloudflare Access ([`functions/_shared/accessAuth.ts`](functions/_shared/accessAuth.ts)) — sem `CF_ACCESS_TEAM_DOMAIN`/`CF_ACCESS_AUD` configurados, responde sempre `503` (bloqueado por padrão).
+- **Esquema D1**: [`migrations/0001_analytics_events.sql`](migrations/0001_analytics_events.sql) — colunas fechadas com `CHECK` por enum, verificado localmente via `wrangler d1 migrations apply --local` (nunca aplicado em produção nesta fase).
+- **Retenção**: plano de 90 dias documentado e testado localmente (`node:sqlite`, sem tocar em nenhum banco real) em [`scripts/analyticsRetention.ts`](scripts/analyticsRetention.ts) — a execução automática em produção (Cloudflare Cron Trigger) ainda não está configurada.
+
+## Comandos locais
+
+```bash
+npm install               # instala dependências
+npm run dev                # servidor de desenvolvimento (Vite, porta 5173)
+npm run build               # tsc -b && vite build && geração do HTML estático por rota
+npm run preview             # serve o build de produção localmente
+npm run verify:seo          # comprova os metadados do HTML estático gerado (depois de build)
+npm run gen:social-assets   # regenera og-elevepdf.png e apple-touch-icon.png
+npm run gen:fixtures        # gera PDFs reais de teste em tests/fixtures/ (necessário antes dos testes)
+npm test                    # testes unitários (Vitest)
+npm run test:e2e            # testes end-to-end (Playwright, navegador real)
+npm run typecheck           # TypeScript --noEmit (app + Cloudflare Functions/shared)
+npm run lint                # ESLint
+npm run d1:migrate:local    # aplica a migration do Analytics no D1 local (Miniflare, sem recurso real)
+```
+
+Para simular o roteamento real do Cloudflare Pages localmente (200 nas rotas conhecidas, 404 real em rotas desconhecidas), depois de `npm run build`:
+
+```bash
+npx wrangler pages dev dist --compatibility-date=2026-01-01
+```
+
+## Checklist de publicação (pendências antes de qualquer deploy real)
+
+Nada abaixo foi feito ainda — só código e verificação local:
+
+1. Criar o projeto Cloudflare Pages.
+2. Criar um banco D1 real.
+3. Substituir o placeholder de `database_id` em [`wrangler.toml`](wrangler.toml) pelo ID real.
+4. Configurar o binding `DB` no projeto Pages.
+5. Aplicar a migration (`migrations/0001_analytics_events.sql`) no D1 de produção.
+6. Configurar o Cloudflare Access para `/admin/analytics`.
+7. Configurar a variável `CF_ACCESS_TEAM_DOMAIN`.
+8. Configurar a variável `CF_ACCESS_AUD`.
+9. Validar o fluxo real de JWT do Access em produção.
+10. Configurar a retenção automática de 90 dias (Cloudflare Cron Trigger).
+11. Configurar o domínio `elevepdf.elevesites.com.br`.
+12. Validar HTTPS.
+13. Verificar `robots.txt` em produção.
+14. Verificar `sitemap.xml` em produção.
+15. Validar a imagem OG em produção (ex.: debugador de compartilhamento do WhatsApp/redes sociais).
+16. Validar o 404 real em produção (status HTTP, não só a UI).
+17. Testar o fluxo de consentimento em produção.
+18. Testar o endpoint de evento em produção.
+19. Testar o painel protegido em produção (bloqueado até Access ser configurado, depois liberado).
+20. Cadastrar o domínio no Google Search Console.
 
 ---
 

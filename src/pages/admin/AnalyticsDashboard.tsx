@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { findSeoPage } from "@shared/seo/pages";
+
+const PAGE_META = findSeoPage("/admin/analytics")!;
 
 interface SummaryResponse {
   period: { from: string; to: string };
@@ -40,12 +43,7 @@ type FetchState =
  *      página nunca tem acesso a dados sem uma resposta 200 desse endpoint.
  */
 export default function AnalyticsDashboard() {
-  useDocumentMeta(
-    "Painel de métricas — ElevePDF",
-    "Painel privado de métricas do ElevePDF.",
-    "/admin/analytics",
-    "noindex, nofollow",
-  );
+  useDocumentMeta(PAGE_META);
   const [state, setState] = useState<FetchState>({ status: "loading" });
 
   useEffect(() => {

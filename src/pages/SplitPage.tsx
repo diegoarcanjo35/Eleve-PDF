@@ -15,19 +15,17 @@ import { hasSplitRiskyStructures } from "@/lib/structuralFindings";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { track } from "@/analytics/client";
 import { durationMsToBucket, oversizedCountToBucket, partsCountToBucket } from "@shared/analytics/events";
+import { findSeoPage } from "@shared/seo/pages";
 
 const TOOL_ID = "dividir-pdf-por-tamanho" as const;
+const PAGE_META = findSeoPage("/dividir-pdf-por-tamanho")!;
 
 interface SplitPartInternal extends SplitPartView {
   bytes: Uint8Array;
 }
 
 export default function SplitPage() {
-  useDocumentMeta(
-    "Dividir PDF por tamanho — ElevePDF",
-    "Divida seu PDF em partes dentro do limite de tamanho escolhido, sem cortar páginas ao meio — direto no navegador.",
-    "/dividir-pdf-por-tamanho",
-  );
+  useDocumentMeta(PAGE_META);
 
   useEffect(() => {
     track("tool_open", { tool_id: TOOL_ID });
