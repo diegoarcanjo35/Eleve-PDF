@@ -96,6 +96,19 @@ describe("validateEventPayload — só eventos e valores permitidos", () => {
     expect(unknown?.landing_page).toBeUndefined();
   });
 
+  it("aceita termos-de-uso como route_id e como landing_page (Gate 1 — Fase 2.3)", () => {
+    const asRoute = validateEventPayload({ ...BASE, route_id: "termos-de-uso" });
+    expect(asRoute?.route_id).toBe("termos-de-uso");
+
+    const asLanding = validateEventPayload({ ...BASE, landing_page: "termos-de-uso" });
+    expect(asLanding?.landing_page).toBe("termos-de-uso");
+  });
+
+  it("continua rejeitando valores arbitrários fora do vocabulário fechado de route_id", () => {
+    const result = validateEventPayload({ ...BASE, route_id: "pagina-inventada" });
+    expect(result?.route_id).toBeUndefined();
+  });
+
   it("nunca aceita occurred_at do cliente — o campo não existe no resultado validado, mesmo se enviado", () => {
     const withValidDate = validateEventPayload({ ...BASE, occurred_at: "2020-01-01T00:00:00.000Z" });
     expect(withValidDate).not.toBeNull();

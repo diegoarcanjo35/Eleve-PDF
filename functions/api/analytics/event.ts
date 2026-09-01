@@ -1,5 +1,5 @@
 import { MAX_EVENT_BODY_BYTES, validateEventPayload } from "../../../shared/analytics/validate";
-import { isAllowedHost, isAllowedOrigin } from "../../_shared/origin";
+import { isAllowedRequestOrigin } from "../../_shared/origin";
 import { isRateLimited } from "../../_shared/rateLimit";
 import { insertAnalyticsEvent, type AnalyticsD1 } from "../../_shared/db";
 
@@ -7,6 +7,8 @@ interface Env {
   DB: AnalyticsD1;
   /** "true" só em ambiente de desenvolvimento local — nunca em produção. */
   ANALYTICS_ALLOW_LOCAL_DEV?: string;
+  /** "true" só nos deployments de preview do projeto Pages `eleve-pdf` — nunca em produção. */
+  ANALYTICS_ALLOW_PAGES_PREVIEW?: string;
 }
 
 function genericError(status: number): Response {
@@ -22,10 +24,11 @@ function genericError(status: number): Response {
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const allowLocalDev = env.ANALYTICS_ALLOW_LOCAL_DEV === "true";
+  const allowPagesPreview = env.ANALYTICS_ALLOW_PAGES_PREVIEW === "true";
 
   const origin = request.headers.get("Origin");
   const host = request.headers.get("Host");
-  if (!isAllowedOrigin(origin, allowLocalDev) || !isAllowedHost(host, allowLocalDev)) {
+  if (!isAllowedRequestOrigin(origin, host, { allowLocalDev, allowPagesPreview })) {
     return genericError(403);
   }
 

@@ -1,23 +1,42 @@
 # Configuração do Cloudflare Pages para o ElevePDF.
 #
-# `database_id` abaixo é um PLACEHOLDER — nenhum banco D1 real foi criado nesta
-# fase (não há wrangler autenticado neste ambiente, e a criação de recursos reais
-# na Cloudflare é uma decisão do Diego, feita quando ele configurar o projeto no
-# painel). Para desenvolvimento/teste local, `wrangler pages dev --local` usa
-# emulação local de D1 e ignora o valor de `database_id` real.
-name = "elevepdf"
+# Bancos D1 reais (Fase 2.3E): produção usa `elevepdf-analytics`, preview usa
+# `elevepdf-analytics-preview`, ambos criados na conta Criativoselevados@gmail.com.
+# `d1_databases` não é uma chave herdável em Pages (ver docs oficiais de Wrangler
+# Configuration para Pages), então o binding de preview é declarado de forma
+# explícita e completa em [[env.preview.d1_databases]], sem depender de herança
+# do bloco top-level — que serve à produção e ao `wrangler pages dev --local`
+# (que usa emulação local de D1 por padrão e ignora o `database_id` real).
+name = "eleve-pdf"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-01-01"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "elevepdf-analytics"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "9efbfa40-2e1d-4f7b-82c9-68b99502ddb9"
+migrations_dir = "migrations"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "elevepdf-analytics-preview"
+database_id = "38e7597b-692b-4545-9930-0a0a9fdaef6e"
 migrations_dir = "migrations"
 
 # Variáveis usadas pelos endpoints de Analytics — ver functions/api/analytics/.
 # CF_ACCESS_TEAM_DOMAIN e CF_ACCESS_AUD ficam ausentes de propósito: enquanto
 # não forem configuradas em produção, GET /api/analytics/summary responde 503
 # (painel bloqueado por padrão — ver relatório, "Proteção obrigatória").
+# ANALYTICS_ALLOW_PAGES_PREVIEW fica "false" aqui de propósito — só é "true"
+# em [env.preview.vars], para liberar Origin/Host de *.eleve-pdf.pages.dev
+# somente nos deployments de preview (ver functions/_shared/origin.ts).
 [vars]
 ANALYTICS_ALLOW_LOCAL_DEV = "false"
+ANALYTICS_ALLOW_PAGES_PREVIEW = "false"
+
+# `vars` também não é herdável: como env.preview já sobrescreve d1_databases,
+# precisa repetir vars aqui — senão o preview perde ANALYTICS_ALLOW_LOCAL_DEV
+# e ANALYTICS_ALLOW_PAGES_PREVIEW.
+[env.preview.vars]
+ANALYTICS_ALLOW_LOCAL_DEV = "false"
+ANALYTICS_ALLOW_PAGES_PREVIEW = "true"

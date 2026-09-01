@@ -33,7 +33,13 @@ export function isAllowedEvent(value: unknown): value is AnalyticsEventType {
 export const ALLOWED_TOOL_IDS = ["compactar-pdf", "dividir-pdf-por-tamanho"] as const;
 export type ToolId = (typeof ALLOWED_TOOL_IDS)[number];
 
-export const ALLOWED_ROUTE_IDS = ["home", "compactar-pdf", "dividir-pdf-por-tamanho", "privacidade"] as const;
+export const ALLOWED_ROUTE_IDS = [
+  "home",
+  "compactar-pdf",
+  "dividir-pdf-por-tamanho",
+  "privacidade",
+  "termos-de-uso",
+] as const;
 export type RouteId = (typeof ALLOWED_ROUTE_IDS)[number];
 
 export const ALLOWED_CTA_IDS = [

@@ -12,13 +12,14 @@ function Probe() {
     <div>
       <button onClick={() => navigate("/compactar-pdf")}>go-compress</button>
       <button onClick={() => navigate("/")}>go-home</button>
+      <button onClick={() => navigate("/termos-de-uso")}>go-terms</button>
     </div>
   );
 }
 
-function renderApp() {
+function renderApp(initialPath = "/") {
   return render(
-    <MemoryRouter initialEntries={["/"]}>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="*" element={<Probe />} />
       </Routes>
@@ -132,6 +133,48 @@ describe("Ciclo de page_view — consentimento, navegação SPA e revogação", 
     renderApp();
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(lastEventBody().route_id).toBe("home");
+  });
+
+  it("/termos-de-uso: já aceito ao entrar gera exatamente um page_view com route_id termos-de-uso (Gate 1)", () => {
+    setConsent("accepted");
+    renderApp("/termos-de-uso");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(lastEventBody().route_id).toBe("termos-de-uso");
+  });
+
+  it("/termos-de-uso: sem consentimento, nenhum evento é enviado (Gate 1)", () => {
+    renderApp("/termos-de-uso");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("/termos-de-uso: aceitar consentimento já dentro da página gera o page_view esperado (Gate 1)", () => {
+    renderApp("/termos-de-uso");
+    expect(fetch).not.toHaveBeenCalled();
+
+    act(() => setConsent("accepted"));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const body = lastEventBody();
+    expect(body.event).toBe("page_view");
+    expect(body.route_id).toBe("termos-de-uso");
+  });
+
+  it("/termos-de-uso: navegação SPA até a página gera só o evento correto, sem duplicar (Gate 1)", () => {
+    const { getByText } = renderApp("/");
+    act(() => setConsent("accepted"));
+    expect(fetch).toHaveBeenCalledTimes(1); // page_view inicial da home
+
+    act(() => {
+      getByText("go-terms").click();
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(lastEventBody().route_id).toBe("termos-de-uso");
+
+    // Clicar de novo no mesmo destino não deve gerar duplicata (mesma rota).
+    act(() => {
+      getByText("go-terms").click();
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("rota administrativa não gera page_view mesmo com consentimento aceito", () => {

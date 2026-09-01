@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS analytics_events (
     'oversized_parts_result'
   )),
   route_id TEXT CHECK (route_id IS NULL OR route_id IN (
-    'home', 'compactar-pdf', 'dividir-pdf-por-tamanho', 'privacidade'
+    'home', 'compactar-pdf', 'dividir-pdf-por-tamanho', 'privacidade', 'termos-de-uso'
   )),
   tool_id TEXT CHECK (tool_id IS NULL OR tool_id IN (
     'compactar-pdf', 'dividir-pdf-por-tamanho'
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS analytics_events (
   utm_term TEXT,
   referrer_host TEXT,       -- só hostname, nunca a URL completa (ver shared/analytics/sanitize.ts)
   landing_page TEXT CHECK (landing_page IS NULL OR landing_page IN (
-    'home', 'compactar-pdf', 'dividir-pdf-por-tamanho', 'privacidade'
+    'home', 'compactar-pdf', 'dividir-pdf-por-tamanho', 'privacidade', 'termos-de-uso'
   ))
 );
 
