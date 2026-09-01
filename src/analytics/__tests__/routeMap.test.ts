@@ -14,14 +14,18 @@ describe("pathToRouteId — mapeamento de rota pública para identificador anal�
     expect(pathToRouteId("/privacidade")).toBe("privacidade");
   });
 
+  it("mapeia /juntar-pdfs para o identificador juntar-pdfs (Fase 3.1)", () => {
+    expect(pathToRouteId("/juntar-pdfs")).toBe("juntar-pdfs");
+  });
+
   it("/admin/analytics continua fora do mapeamento (nenhum page_view gerado)", () => {
     expect(pathToRouteId("/admin/analytics")).toBeNull();
   });
 
-  it("consistência sitemap × taxonomia: os cinco caminhos públicos do sitemap (shared/seo/pages.ts) têm identificador analítico", () => {
+  it("consistência sitemap × taxonomia: os seis caminhos públicos do sitemap (shared/seo/pages.ts) têm identificador analítico", () => {
     for (const page of SEO_PAGES) {
       expect(pathToRouteId(page.path)).not.toBeNull();
     }
-    expect(SEO_PAGES).toHaveLength(5);
+    expect(SEO_PAGES).toHaveLength(6);
   });
 });

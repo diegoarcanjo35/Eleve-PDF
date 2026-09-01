@@ -93,8 +93,9 @@ function main() {
   checkPublicPage("index.html", "/", SEO_PAGES[0]!);
   checkPublicPage("compactar-pdf.html", "/compactar-pdf", SEO_PAGES[1]!);
   checkPublicPage("dividir-pdf-por-tamanho.html", "/dividir-pdf-por-tamanho", SEO_PAGES[2]!);
-  checkPublicPage("privacidade.html", "/privacidade", SEO_PAGES[3]!);
-  checkPublicPage("termos-de-uso.html", "/termos-de-uso", SEO_PAGES[4]!);
+  checkPublicPage("juntar-pdfs.html", "/juntar-pdfs", SEO_PAGES[3]!);
+  checkPublicPage("privacidade.html", "/privacidade", SEO_PAGES[4]!);
+  checkPublicPage("termos-de-uso.html", "/termos-de-uso", SEO_PAGES[5]!);
 
   const adminHtml = readRoute("admin/analytics.html");
   if (!adminHtml) {

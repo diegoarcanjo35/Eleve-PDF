@@ -104,6 +104,21 @@ describe("validateEventPayload — só eventos e valores permitidos", () => {
     expect(asLanding?.landing_page).toBe("termos-de-uso");
   });
 
+  it("aceita juntar-pdfs como tool_id/route_id/landing_page e card_juntar como cta_id (Fase 3.1)", () => {
+    const result = validateEventPayload({
+      ...BASE,
+      event: "tool_open",
+      tool_id: "juntar-pdfs",
+      route_id: "juntar-pdfs",
+      landing_page: "juntar-pdfs",
+      cta_id: "card_juntar",
+    });
+    expect(result?.tool_id).toBe("juntar-pdfs");
+    expect(result?.route_id).toBe("juntar-pdfs");
+    expect(result?.landing_page).toBe("juntar-pdfs");
+    expect(result?.cta_id).toBe("card_juntar");
+  });
+
   it("continua rejeitando valores arbitrários fora do vocabulário fechado de route_id", () => {
     const result = validateEventPayload({ ...BASE, route_id: "pagina-inventada" });
     expect(result?.route_id).toBeUndefined();

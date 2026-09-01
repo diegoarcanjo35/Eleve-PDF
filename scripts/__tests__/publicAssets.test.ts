@@ -43,7 +43,7 @@ describe("robots.txt e sitemap.xml", () => {
     expect(content).not.toMatch(/Disallow:\s*\/admin/i);
   });
 
-  it("sitemap.xml lista exatamente as cinco URLs públicas, nenhuma outra", () => {
+  it("sitemap.xml lista exatamente as seis URLs públicas, nenhuma outra (Fase 3.1: Juntar PDFs)", () => {
     const content = readFileSync(publicPath("sitemap.xml"), "utf-8");
     const urls = [...content.matchAll(/<loc>(.*?)<\/loc>/g)].map((m) => m[1]);
 
@@ -51,6 +51,7 @@ describe("robots.txt e sitemap.xml", () => {
       "https://elevepdf.elevesites.com.br/",
       "https://elevepdf.elevesites.com.br/compactar-pdf",
       "https://elevepdf.elevesites.com.br/dividir-pdf-por-tamanho",
+      "https://elevepdf.elevesites.com.br/juntar-pdfs",
       "https://elevepdf.elevesites.com.br/privacidade",
       "https://elevepdf.elevesites.com.br/termos-de-uso",
     ]);

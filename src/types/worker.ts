@@ -1,5 +1,6 @@
 import type { CompressionLevel, CompressOutcome, CompressProgress } from "@/lib/pdfCompress";
 import type { SplitProgress } from "@/lib/pdfSplit";
+import type { MergeProgress } from "@/lib/pdfMerge";
 import type { PdfErrorCode } from "@/lib/errors";
 import type { StructuralFindings } from "@/lib/structuralAnalysis";
 
@@ -24,6 +25,13 @@ export interface SplitRequest {
   maxBytes: number;
 }
 
+export interface MergeRequest {
+  id: string;
+  type: "merge";
+  /** Bytes de cada PDF, na ordem em que devem ser juntados. */
+  filesBytes: ArrayBuffer[];
+}
+
 export interface CancelRequest {
   id: string;
   type: "cancel";
@@ -33,12 +41,13 @@ export type WorkerRequest =
   | ValidateRequest
   | CompressRequest
   | SplitRequest
+  | MergeRequest
   | CancelRequest;
 
 export interface ProgressMessage {
   id: string;
   type: "progress";
-  progress: SplitProgress | CompressProgress;
+  progress: SplitProgress | CompressProgress | MergeProgress;
 }
 
 export interface ValidateSuccessMessage {
@@ -73,6 +82,14 @@ export interface SplitSuccessMessage {
   }[];
 }
 
+export interface MergeSuccessMessage {
+  id: string;
+  type: "merge-success";
+  bytes: ArrayBuffer;
+  totalPages: number;
+  fileCount: number;
+}
+
 export interface ErrorMessage {
   id: string;
   type: "error";
@@ -85,4 +102,5 @@ export type WorkerResponse =
   | ValidateSuccessMessage
   | CompressSuccessMessage
   | SplitSuccessMessage
+  | MergeSuccessMessage
   | ErrorMessage;

@@ -64,6 +64,15 @@ export const SEO_PAGES: SeoPageMeta[] = [
     canonical: true,
   },
   {
+    path: "/juntar-pdfs",
+    title: "Juntar PDFs grátis, direto no navegador — ElevePDF",
+    description:
+      "Combine dois ou mais arquivos PDF em um único documento, na ordem que você escolher, processado no seu navegador, sem enviar os arquivos a servidores.",
+    robots: "index, follow",
+    social: true,
+    canonical: true,
+  },
+  {
     path: "/privacidade",
     title: "Privacidade e métricas — ElevePDF",
     description:

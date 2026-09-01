@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compressedFileName, partFileName, sanitizeBaseName } from "../filenames";
+import { compressedFileName, mergedFileName, partFileName, sanitizeBaseName } from "../filenames";
 
 describe("sanitizeBaseName", () => {
   it("strips the .pdf extension", () => {
@@ -33,5 +33,11 @@ describe("partFileName", () => {
 describe("compressedFileName", () => {
   it("appends -compactado suffix", () => {
     expect(compressedFileName("contrato.pdf")).toBe("contrato-compactado.pdf");
+  });
+});
+
+describe("mergedFileName", () => {
+  it("é sempre 'documentos-unidos.pdf', fixo, independente dos nomes de entrada", () => {
+    expect(mergedFileName()).toBe("documentos-unidos.pdf");
   });
 });

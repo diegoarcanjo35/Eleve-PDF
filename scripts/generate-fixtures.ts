@@ -127,6 +127,51 @@ async function buildLargeWithUniqueImages(pageCount: number) {
   return doc.save();
 }
 
+/**
+ * Fixtures dedicadas ao E2E de "Juntar PDFs" (Fase 3.1) — dois documentos
+ * PEQUENOS e distintos, usados como fontes reais da junção. A prova de ordem
+ * no E2E não depende do nome do arquivo: cada fixture tem um TAMANHO DE
+ * PÁGINA próprio (assinatura estrutural, verificável via page.getSize() no
+ * PDF baixado) e um marcador de texto próprio embutido em cada página
+ * ("juntar-fonte-a-pagina-N" / "juntar-fonte-b-pagina-N"), extraível tanto do
+ * stream de conteúdo (pdf-lib) quanto via extração real de texto (pdfjs-dist).
+ */
+async function buildMergeSourceA() {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const pageCount = 2;
+  for (let i = 0; i < pageCount; i += 1) {
+    const page = doc.addPage([400, 600]);
+    const n = i + 1;
+    page.drawText(`ElevePDF fixture — juntar-fonte-a-pagina-${n}`, {
+      x: 30,
+      y: 560,
+      size: 14,
+      font,
+      color: rgb(0.06, 0.09, 0.12),
+    });
+  }
+  return doc.save();
+}
+
+async function buildMergeSourceB() {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const pageCount = 3;
+  for (let i = 0; i < pageCount; i += 1) {
+    const page = doc.addPage([300, 500]);
+    const n = i + 1;
+    page.drawText(`ElevePDF fixture — juntar-fonte-b-pagina-${n}`, {
+      x: 30,
+      y: 460,
+      size: 14,
+      font,
+      color: rgb(0.06, 0.09, 0.12),
+    });
+  }
+  return doc.save();
+}
+
 async function buildWithSensitiveStructures() {
   const doc = await PDFDocument.create();
   const form = doc.getForm();
@@ -185,6 +230,12 @@ async function main() {
 
   const sensitiveStructures = await buildWithSensitiveStructures();
   await writeFile(path.join(OUT_DIR, "sensitive-structures.pdf"), sensitiveStructures);
+
+  const mergeSourceA = await buildMergeSourceA();
+  await writeFile(path.join(OUT_DIR, "merge-source-a.pdf"), mergeSourceA);
+
+  const mergeSourceB = await buildMergeSourceB();
+  await writeFile(path.join(OUT_DIR, "merge-source-b.pdf"), mergeSourceB);
 
   const corruptedSource = await buildSimpleOnePage();
   const corrupted = corruptedSource.slice(0, Math.floor(corruptedSource.length * 0.6));

@@ -47,3 +47,13 @@ export function hasSplitRiskyStructures(findings: StructuralFindings): boolean {
     findings.pagesWithLinkAnnotations > 0
   );
 }
+
+/**
+ * Mesmo critério de `hasSplitRiskyStructures`, com o mesmo motivo: o PDF
+ * resultante da junção também é um documento novo (`PDFDocument.create()` +
+ * `copyPages`), então nenhuma estrutura de nível de documento do(s) PDF(s)
+ * original(is) é copiada para o catálogo do arquivo final.
+ */
+export function hasMergeRiskyStructures(findings: StructuralFindings): boolean {
+  return hasSplitRiskyStructures(findings);
+}

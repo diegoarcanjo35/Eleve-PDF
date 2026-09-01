@@ -12,6 +12,7 @@ interface ToolCardProps {
 const CARD_CTA_ID: Partial<Record<ToolId, CtaId>> = {
   "compactar-pdf": "card_compactar",
   "dividir-pdf-por-tamanho": "card_dividir",
+  "juntar-pdfs": "card_juntar",
 };
 
 export function ToolCard({ tool, primary = false }: ToolCardProps) {

@@ -11,19 +11,22 @@ function renderHome() {
         <Route path="/" element={<Home />} />
         <Route path="/compactar-pdf" element={<div>Página de compactar</div>} />
         <Route path="/dividir-pdf-por-tamanho" element={<div>Página de dividir</div>} />
+        <Route path="/juntar-pdfs" element={<div>Página de juntar</div>} />
       </Routes>
     </MemoryRouter>,
   );
 }
 
 describe("Home", () => {
-  it("mostra as duas ferramentas disponíveis, com status e rota corretos", () => {
+  it("mostra as três ferramentas disponíveis, com status e rota corretos (Fase 3.1: Juntar PDFs saiu de 'Em breve')", () => {
     renderHome();
     const availableSection = screen.getByRole("heading", { name: "Comece por aqui" }).closest("section")!;
     const compress = within(availableSection).getByRole("link", { name: /compactar pdf — disponível/i });
     const split = within(availableSection).getByRole("link", { name: /dividir por tamanho — disponível/i });
+    const merge = within(availableSection).getByRole("link", { name: /juntar pdfs — disponível/i });
     expect(compress).toHaveAttribute("href", "/compactar-pdf");
     expect(split).toHaveAttribute("href", "/dividir-pdf-por-tamanho");
+    expect(merge).toHaveAttribute("href", "/juntar-pdfs");
   });
 
   it("navega para a rota correta ao clicar em um cartão disponível", async () => {
@@ -34,9 +37,17 @@ describe("Home", () => {
     expect(await screen.findByText("Página de compactar")).toBeInTheDocument();
   });
 
+  it("navega para /juntar-pdfs ao clicar no cartão de Juntar PDFs", async () => {
+    const user = userEvent.setup();
+    renderHome();
+    const availableSection = screen.getByRole("heading", { name: "Comece por aqui" }).closest("section")!;
+    await user.click(within(availableSection).getByRole("link", { name: /juntar pdfs — disponível/i }));
+    expect(await screen.findByText("Página de juntar")).toBeInTheDocument();
+  });
+
   it("cartões 'Em breve' não são links nem acionáveis", () => {
     renderHome();
-    const comingSoonTitle = screen.getByRole("heading", { name: "Juntar PDFs" });
+    const comingSoonTitle = screen.getByRole("heading", { name: "Organizar páginas" });
     const card = comingSoonTitle.closest(".tool-card");
     expect(card).not.toBeNull();
     expect(card?.tagName).toBe("DIV");

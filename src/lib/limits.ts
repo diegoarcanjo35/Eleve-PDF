@@ -9,3 +9,8 @@ export const MIN_SPLIT_SIZE_BYTES = 64 * 1024; // 64 KB — abaixo disso a divis
 export const MAX_SPLIT_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB (limite teórico, irrelevante na prática)
 
 export const QUICK_SPLIT_PRESETS_MB = [1, 2, 5, 10, 20] as const;
+
+/** Limite de arquivos por operação de junção — protege a memória do navegador
+ * (cada arquivo é lido inteiro na aba antes de ir para o worker). */
+export const MAX_MERGE_FILE_COUNT = 50;
+export const MIN_MERGE_FILE_COUNT = 2;

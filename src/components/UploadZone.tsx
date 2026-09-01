@@ -1,11 +1,27 @@
 import { useCallback, useId, useRef, useState } from "react";
 
 interface UploadZoneProps {
-  onFileSelected: (file: File) => void;
+  /** Modo de arquivo único (Compactar/Dividir) — ignorado quando `multiple` é true. */
+  onFileSelected?: (file: File) => void;
+  /** Modo de múltiplos arquivos (Juntar PDFs). */
+  onFilesSelected?: (files: File[]) => void;
+  multiple?: boolean;
   disabled?: boolean;
+  title?: string;
+  hint?: string;
 }
 
-export function UploadZone({ onFileSelected, disabled }: UploadZoneProps) {
+const DEFAULT_TITLE = "Arraste um PDF aqui ou clique para selecionar";
+const DEFAULT_HINT = "Apenas arquivos .pdf · processado no seu dispositivo, nunca enviado a servidores";
+
+export function UploadZone({
+  onFileSelected,
+  onFilesSelected,
+  multiple = false,
+  disabled,
+  title,
+  hint,
+}: UploadZoneProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -15,15 +31,27 @@ export function UploadZone({ onFileSelected, disabled }: UploadZoneProps) {
     inputRef.current?.click();
   }, [disabled]);
 
+  const dispatchFiles = useCallback(
+    (fileList: FileList | null) => {
+      if (!fileList || fileList.length === 0) return;
+      if (multiple) {
+        onFilesSelected?.(Array.from(fileList));
+      } else {
+        const file = fileList[0];
+        if (file) onFileSelected?.(file);
+      }
+    },
+    [multiple, onFileSelected, onFilesSelected],
+  );
+
   const handleDrop = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
       setIsDragActive(false);
       if (disabled) return;
-      const file = event.dataTransfer.files[0];
-      if (file) onFileSelected(file);
+      dispatchFiles(event.dataTransfer.files);
     },
-    [disabled, onFileSelected],
+    [disabled, dispatchFiles],
   );
 
   return (
@@ -54,11 +82,11 @@ export function UploadZone({ onFileSelected, disabled }: UploadZoneProps) {
         id={inputId}
         type="file"
         accept="application/pdf,.pdf"
+        multiple={multiple}
         className="upload-zone__input"
         disabled={disabled}
         onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) onFileSelected(file);
+          dispatchFiles(event.target.files);
           event.target.value = "";
         }}
       />
@@ -73,9 +101,9 @@ export function UploadZone({ onFileSelected, disabled }: UploadZoneProps) {
           />
         </svg>
       </div>
-      <p className="upload-zone__title">Arraste um PDF aqui ou clique para selecionar</p>
+      <p className="upload-zone__title">{title ?? DEFAULT_TITLE}</p>
       <p className="upload-zone__hint" id={`${inputId}-hint`}>
-        Apenas arquivos .pdf · processado no seu dispositivo, nunca enviado a servidores
+        {hint ?? DEFAULT_HINT}
       </p>
       <span className="button button--primary upload-zone__button">Selecionar arquivo</span>
     </div>

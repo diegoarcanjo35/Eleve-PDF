@@ -3,6 +3,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import { validatePdfBytes } from "@/lib/validation";
 import { compressPdf } from "@/lib/pdfCompress";
 import { splitPdfBySize } from "@/lib/pdfSplit";
+import { mergePdfs } from "@/lib/pdfMerge";
 import { PdfAppError } from "@/lib/errors";
 import type { WorkerRequest, WorkerResponse } from "@/types/worker";
 
@@ -105,6 +106,30 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
       post(
         { id: request.id, type: "split-success", totalPages: result.totalPages, parts },
         transferBuffers,
+      );
+      return;
+    }
+
+    if (request.type === "merge") {
+      const buffers = request.filesBytes.map((buf) => new Uint8Array(buf));
+      const result = await mergePdfs(
+        buffers,
+        (progress) => post({ id: request.id, type: "progress", progress }),
+        () => cancelledIds.has(request.id),
+      );
+      const outBuffer = result.bytes.buffer.slice(
+        result.bytes.byteOffset,
+        result.bytes.byteOffset + result.bytes.byteLength,
+      ) as ArrayBuffer;
+      post(
+        {
+          id: request.id,
+          type: "merge-success",
+          bytes: outBuffer,
+          totalPages: result.totalPages,
+          fileCount: result.fileCount,
+        },
+        [outBuffer],
       );
       return;
     }

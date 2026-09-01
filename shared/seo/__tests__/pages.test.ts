@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { absoluteUrl, findSeoPage, SEO_NOT_FOUND, SEO_PAGES, SEO_PRIVATE_PAGES } from "../pages";
 
-const EXPECTED_PUBLIC_PATHS = ["/", "/compactar-pdf", "/dividir-pdf-por-tamanho", "/privacidade", "/termos-de-uso"];
+const EXPECTED_PUBLIC_PATHS = [
+  "/",
+  "/compactar-pdf",
+  "/dividir-pdf-por-tamanho",
+  "/juntar-pdfs",
+  "/privacidade",
+  "/termos-de-uso",
+];
 
-describe("SEO_PAGES — as cinco rotas públicas indexáveis", () => {
-  it("contém exatamente as cinco rotas esperadas, na ordem certa", () => {
+describe("SEO_PAGES — as seis rotas públicas indexáveis", () => {
+  it("contém exatamente as seis rotas esperadas, na ordem certa", () => {
     expect(SEO_PAGES.map((p) => p.path)).toEqual(EXPECTED_PUBLIC_PATHS);
   });
 
@@ -29,6 +36,7 @@ describe("SEO_PAGES — as cinco rotas públicas indexáveis", () => {
     expect(absoluteUrl("/dividir-pdf-por-tamanho")).toBe(
       "https://elevepdf.elevesites.com.br/dividir-pdf-por-tamanho",
     );
+    expect(absoluteUrl("/juntar-pdfs")).toBe("https://elevepdf.elevesites.com.br/juntar-pdfs");
     expect(absoluteUrl("/privacidade")).toBe("https://elevepdf.elevesites.com.br/privacidade");
     expect(absoluteUrl("/termos-de-uso")).toBe("https://elevepdf.elevesites.com.br/termos-de-uso");
   });

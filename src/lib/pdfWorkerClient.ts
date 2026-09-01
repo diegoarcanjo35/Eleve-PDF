@@ -1,5 +1,6 @@
 import type {
   CompressSuccessMessage,
+  MergeSuccessMessage,
   SplitSuccessMessage,
   ValidateSuccessMessage,
   WorkerRequest,
@@ -8,6 +9,9 @@ import type {
 import { PdfAppError } from "./errors";
 import type { CompressionLevel, CompressProgress } from "./pdfCompress";
 import type { SplitProgress } from "./pdfSplit";
+import type { MergeProgress } from "./pdfMerge";
+
+type AnyProgress = SplitProgress | CompressProgress | MergeProgress;
 
 let worker: Worker | null = null;
 let requestCounter = 0;
@@ -26,10 +30,25 @@ function nextId(): string {
   return `req-${requestCounter}-${Date.now()}`;
 }
 
+/** Buffers transferíveis de cada tipo de requisição — cada um tem seu próprio
+ * formato (um buffer só, ou uma lista, no caso da junção de vários PDFs). */
+function transferablesFor(request: WorkerRequest): Transferable[] {
+  switch (request.type) {
+    case "validate":
+    case "compress":
+    case "split":
+      return [request.fileBytes];
+    case "merge":
+      return request.filesBytes;
+    case "cancel":
+      return [];
+  }
+}
+
 function runRequest<TSuccess extends WorkerResponse>(
   request: WorkerRequest,
   successType: TSuccess["type"],
-  onProgress?: (progress: SplitProgress | CompressProgress) => void,
+  onProgress?: (progress: AnyProgress) => void,
 ): { promise: Promise<TSuccess>; cancel: () => void } {
   const w = getWorker();
   let settled = false;
@@ -56,7 +75,7 @@ function runRequest<TSuccess extends WorkerResponse>(
       }
     };
     w.addEventListener("message", handleMessage);
-    w.postMessage(request, request.type !== "cancel" ? [request.fileBytes] : []);
+    w.postMessage(request, transferablesFor(request));
   });
 
   const cancel = () => {
@@ -84,7 +103,7 @@ export function requestCompress(
   return runRequest<CompressSuccessMessage>(
     { id, type: "compress", fileBytes: file, level },
     "compress-success",
-    onProgress as (progress: SplitProgress | CompressProgress) => void,
+    onProgress as (progress: AnyProgress) => void,
   );
 }
 
@@ -97,6 +116,16 @@ export function requestSplit(
   return runRequest<SplitSuccessMessage>(
     { id, type: "split", fileBytes: file, maxBytes },
     "split-success",
-    onProgress as (progress: SplitProgress | CompressProgress) => void,
+    onProgress as (progress: AnyProgress) => void,
+  );
+}
+
+/** `files` deve conter os bytes de cada PDF na ordem em que devem ser juntados. */
+export function requestMerge(files: ArrayBuffer[], onProgress?: (progress: MergeProgress) => void) {
+  const id = nextId();
+  return runRequest<MergeSuccessMessage>(
+    { id, type: "merge", filesBytes: files },
+    "merge-success",
+    onProgress as (progress: AnyProgress) => void,
   );
 }

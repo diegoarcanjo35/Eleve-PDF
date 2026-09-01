@@ -10,6 +10,7 @@ import { usePageView } from "@/analytics/usePageView";
 // nem `pdfjs-dist` — só quando o usuário efetivamente abre uma ferramenta.
 const CompressPage = lazy(() => import("@/pages/CompressPage"));
 const SplitPage = lazy(() => import("@/pages/SplitPage"));
+const MergePage = lazy(() => import("@/pages/MergePage"));
 const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
 const TermsPage = lazy(() => import("@/pages/TermsPage"));
 const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/compactar-pdf" element={<CompressPage />} />
           <Route path="/dividir-pdf-por-tamanho" element={<SplitPage />} />
+          <Route path="/juntar-pdfs" element={<MergePage />} />
           <Route path="/privacidade" element={<PrivacyPage />} />
           <Route path="/termos-de-uso" element={<TermsPage />} />
           <Route path="/admin/analytics" element={<AnalyticsDashboard />} />

@@ -4,6 +4,7 @@ const PATH_TO_ROUTE_ID: Record<string, RouteId> = {
   "/": "home",
   "/compactar-pdf": "compactar-pdf",
   "/dividir-pdf-por-tamanho": "dividir-pdf-por-tamanho",
+  "/juntar-pdfs": "juntar-pdfs",
   "/privacidade": "privacidade",
   "/termos-de-uso": "termos-de-uso",
 };

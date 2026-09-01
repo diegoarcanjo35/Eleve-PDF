@@ -30,13 +30,14 @@ export function isAllowedEvent(value: unknown): value is AnalyticsEventType {
 
 /** Identificadores de ferramenta — cresce junto com `toolsRegistry.ts`, mas é uma
  * lista própria e fechada (o backend não deve depender do registro de UI). */
-export const ALLOWED_TOOL_IDS = ["compactar-pdf", "dividir-pdf-por-tamanho"] as const;
+export const ALLOWED_TOOL_IDS = ["compactar-pdf", "dividir-pdf-por-tamanho", "juntar-pdfs"] as const;
 export type ToolId = (typeof ALLOWED_TOOL_IDS)[number];
 
 export const ALLOWED_ROUTE_IDS = [
   "home",
   "compactar-pdf",
   "dividir-pdf-por-tamanho",
+  "juntar-pdfs",
   "privacidade",
   "termos-de-uso",
 ] as const;
@@ -47,6 +48,7 @@ export const ALLOWED_CTA_IDS = [
   "hero_dividir",
   "card_compactar",
   "card_dividir",
+  "card_juntar",
   "cross_link_compactar",
   "cross_link_dividir",
 ] as const;

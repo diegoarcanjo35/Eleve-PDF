@@ -20,3 +20,9 @@ export function partFileName(baseName: string, index: number, total: number): st
 export function compressedFileName(baseName: string): string {
   return `${sanitizeBaseName(baseName)}-compactado.pdf`;
 }
+
+/** Nome fixo do PDF resultante da junção — não é derivado dos nomes dos
+ * arquivos de origem (podem ser muitos, de nomes muito diferentes). */
+export function mergedFileName(): string {
+  return "documentos-unidos.pdf";
+}
