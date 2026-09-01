@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { UploadZone } from "@/components/UploadZone";
 import { FileCard } from "@/components/FileCard";
 import { ProgressBar } from "@/components/ProgressBar";
@@ -13,6 +13,10 @@ import { partFileName } from "@/lib/filenames";
 import { zipFiles } from "@/lib/zip";
 import { hasSplitRiskyStructures } from "@/lib/structuralFindings";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { track } from "@/analytics/client";
+import { durationMsToBucket, oversizedCountToBucket, partsCountToBucket } from "@shared/analytics/events";
+
+const TOOL_ID = "dividir-pdf-por-tamanho" as const;
 
 interface SplitPartInternal extends SplitPartView {
   bytes: Uint8Array;
@@ -22,7 +26,12 @@ export default function SplitPage() {
   useDocumentMeta(
     "Dividir PDF por tamanho — ElevePDF",
     "Divida seu PDF em partes dentro do limite de tamanho escolhido, sem cortar páginas ao meio — direto no navegador.",
+    "/dividir-pdf-por-tamanho",
   );
+
+  useEffect(() => {
+    track("tool_open", { tool_id: TOOL_ID });
+  }, []);
 
   const [splitRunning, setSplitRunning] = useState(false);
   const [splitProgress, setSplitProgress] = useState<{ current: number; total: number } | null>(null);
@@ -32,6 +41,7 @@ export default function SplitPage() {
   const [compressingPartIndex, setCompressingPartIndex] = useState<number | null>(null);
   const [splitRiskAcknowledged, setSplitRiskAcknowledged] = useState(false);
   const splitCancelRef = useRef<(() => void) | null>(null);
+  const warningShownForFileRef = useRef<File | null>(null);
 
   const resetResults = useCallback(() => {
     setSplitRunning(false);
@@ -43,10 +53,20 @@ export default function SplitPage() {
     setSplitRiskAcknowledged(false);
   }, []);
 
-  const { file, validation, fileBufferRef, handleFileSelected, handleRemove } = usePdfUpload(resetResults);
+  const { file, validation, fileBufferRef, handleFileSelected, handleRemove } = usePdfUpload(
+    TOOL_ID,
+    resetResults,
+  );
 
   const splitHasRiskyStructures =
     validation.status === "ready" && hasSplitRiskyStructures(validation.structure);
+
+  useEffect(() => {
+    if (splitHasRiskyStructures && file && warningShownForFileRef.current !== file) {
+      warningShownForFileRef.current = file;
+      track("structural_warning_shown", { tool_id: TOOL_ID });
+    }
+  }, [splitHasRiskyStructures, file]);
 
   const handleSplit = useCallback(
     async (maxBytes: number) => {
@@ -57,6 +77,8 @@ export default function SplitPage() {
       setSplitParts(null);
       setSplitMaxBytes(maxBytes);
       setSplitProgress({ current: 0, total: 0 });
+      track("processing_start", { tool_id: TOOL_ID });
+      const startedAt = Date.now();
       try {
         const { promise, cancel } = requestSplit(fileBufferRef.current.slice(0), maxBytes, (progress) => {
           if (progress.stage === "packing") {
@@ -75,12 +97,34 @@ export default function SplitPage() {
           bytes: new Uint8Array(part.bytes),
         }));
         setSplitParts(parts);
+
+        const durationBucket = durationMsToBucket(Date.now() - startedAt);
+        const partsBucket = partsCountToBucket(total);
+        track("processing_success", {
+          tool_id: TOOL_ID,
+          outcome: "success",
+          parts_bucket: partsBucket,
+          duration_bucket: durationBucket,
+        });
+
+        const oversizedCount = parts.filter((p) => p.exceedsLimit).length;
+        track("oversized_parts_result", {
+          tool_id: TOOL_ID,
+          parts_bucket: partsBucket,
+          oversized_parts_bucket: oversizedCountToBucket(oversizedCount),
+        });
       } catch (error) {
         const appError =
           error instanceof PdfAppError
             ? error
             : new PdfAppError("unknown", "Erro desconhecido ao dividir.");
         setSplitError(messageFor(appError.code));
+        track("processing_error", {
+          tool_id: TOOL_ID,
+          outcome: "error",
+          error_category: appError.code,
+          duration_bucket: durationMsToBucket(Date.now() - startedAt),
+        });
       } finally {
         setSplitRunning(false);
         setSplitProgress(null);
@@ -131,6 +175,7 @@ export default function SplitPage() {
       const part = splitParts?.find((item) => item.index === index);
       if (!part) return;
       downloadBytes(part.bytes, part.fileName);
+      track("download_result", { tool_id: TOOL_ID, outcome: "success" });
     },
     [splitParts],
   );
@@ -140,6 +185,7 @@ export default function SplitPage() {
     const zipped = await zipFiles(splitParts.map((part) => ({ name: part.fileName, bytes: part.bytes })));
     const baseName = file ? file.name.replace(/\.pdf$/i, "") : "elevepdf";
     downloadBytes(zipped, `${baseName}-partes.zip`, "application/zip");
+    track("download_result", { tool_id: TOOL_ID, outcome: "success" });
   }, [splitParts, file]);
 
   const isReady = validation.status === "ready";
@@ -149,6 +195,7 @@ export default function SplitPage() {
       title="Dividir PDF por tamanho"
       description="Divida o PDF usando um tamanho máximo como alvo, sem cortar páginas ao meio."
       crossLink={{ label: "Compactar PDF", to: "/compactar-pdf" }}
+      crossLinkCtaId="cross_link_compactar"
     >
       {!file ? (
         <UploadZone onFileSelected={handleFileSelected} />
@@ -218,7 +265,11 @@ export default function SplitPage() {
                 <input
                   type="checkbox"
                   checked={splitRiskAcknowledged}
-                  onChange={(event) => setSplitRiskAcknowledged(event.target.checked)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSplitRiskAcknowledged(checked);
+                    if (checked) track("structural_warning_confirmed", { tool_id: TOOL_ID });
+                  }}
                 />
                 Entendo o risco e quero continuar mesmo assim
               </label>

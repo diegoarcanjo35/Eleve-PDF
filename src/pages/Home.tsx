@@ -4,6 +4,7 @@ import { ToolGrid } from "@/components/layout/ToolGrid";
 import { ToolCategory } from "@/components/layout/ToolCategory";
 import { getAvailableTools } from "@/toolsRegistry";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { track } from "@/analytics/client";
 
 const TRUST_ITEMS = [
   { icon: MonitorSmartphone, label: "Processamento no seu dispositivo" },
@@ -22,6 +23,7 @@ export default function Home() {
   useDocumentMeta(
     "ElevePDF — Seu PDF no tamanho certo",
     "Plataforma de ferramentas para PDF: compacte e divida seus arquivos direto no navegador, sem enviar documentos para servidores.",
+    "/",
   );
   const availableTools = getAvailableTools();
 
@@ -40,11 +42,19 @@ export default function Home() {
             Grátis, direto no navegador e sem enviar seus documentos para nossos servidores.
           </p>
           <div className="hero__actions">
-            <Link to="/compactar-pdf" className="button button--primary">
+            <Link
+              to="/compactar-pdf"
+              className="button button--primary"
+              onClick={() => track("tool_open", { cta_id: "hero_compactar", tool_id: "compactar-pdf" })}
+            >
               Compactar PDF
               <ArrowRight size={16} aria-hidden="true" />
             </Link>
-            <Link to="/dividir-pdf-por-tamanho" className="button button--secondary">
+            <Link
+              to="/dividir-pdf-por-tamanho"
+              className="button button--secondary"
+              onClick={() => track("tool_open", { cta_id: "hero_dividir", tool_id: "dividir-pdf-por-tamanho" })}
+            >
               Dividir por tamanho
             </Link>
           </div>

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { UploadZone } from "@/components/UploadZone";
 import { FileCard } from "@/components/FileCard";
 import { ProgressBar } from "@/components/ProgressBar";
@@ -12,12 +12,21 @@ import { downloadBytes } from "@/lib/download";
 import { compressedFileName } from "@/lib/filenames";
 import type { CompressionLevel } from "@/lib/compressionLevels";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { track } from "@/analytics/client";
+import { durationMsToBucket } from "@shared/analytics/events";
+
+const TOOL_ID = "compactar-pdf" as const;
 
 export default function CompressPage() {
   useDocumentMeta(
     "Compactar PDF — ElevePDF",
     "Reduza o tamanho do seu PDF direto no navegador, sem enviar o arquivo para servidores. Nunca entrega uma versão maior que o original.",
+    "/compactar-pdf",
   );
+
+  useEffect(() => {
+    track("tool_open", { tool_id: TOOL_ID });
+  }, []);
 
   const [compressRunning, setCompressRunning] = useState(false);
   const [compressProgress, setCompressProgress] = useState<{ current: number; total: number } | null>(null);
@@ -31,7 +40,10 @@ export default function CompressPage() {
     setCompressError(null);
   }, []);
 
-  const { file, validation, fileBufferRef, handleFileSelected, handleRemove } = usePdfUpload(resetResults);
+  const { file, validation, fileBufferRef, handleFileSelected, handleRemove } = usePdfUpload(
+    TOOL_ID,
+    resetResults,
+  );
 
   const handleCompress = useCallback(
     async (level: CompressionLevel) => {
@@ -40,6 +52,8 @@ export default function CompressPage() {
       setCompressError(null);
       setCompressResult(null);
       setCompressProgress({ current: 0, total: 0 });
+      track("processing_start", { tool_id: TOOL_ID, compression_level: level });
+      const startedAt = Date.now();
       try {
         const { promise } = requestCompress(fileBufferRef.current.slice(0), level, (progress) => {
           if (progress.stage === "recompressing-images") {
@@ -59,12 +73,29 @@ export default function CompressPage() {
           fileName: file.name,
           bytes,
         });
+        const durationBucket = durationMsToBucket(Date.now() - startedAt);
+        if (response.outcome === "no-gain-original-preserved") {
+          track("no_gain_original_returned", { tool_id: TOOL_ID, compression_level: level, duration_bucket: durationBucket });
+        }
+        track("processing_success", {
+          tool_id: TOOL_ID,
+          compression_level: level,
+          outcome: response.outcome === "reduced" ? "success" : "no_gain",
+          duration_bucket: durationBucket,
+        });
       } catch (error) {
         const appError =
           error instanceof PdfAppError
             ? error
             : new PdfAppError("unknown", "Erro desconhecido ao compactar.");
         setCompressError(messageFor(appError.code));
+        track("processing_error", {
+          tool_id: TOOL_ID,
+          compression_level: level,
+          outcome: "error",
+          error_category: appError.code,
+          duration_bucket: durationMsToBucket(Date.now() - startedAt),
+        });
       } finally {
         setCompressRunning(false);
         setCompressProgress(null);
@@ -76,6 +107,7 @@ export default function CompressPage() {
   const handleDownloadCompress = useCallback(() => {
     if (!compressResult || !file) return;
     downloadBytes(compressResult.bytes, compressedFileName(file.name));
+    track("download_result", { tool_id: TOOL_ID, outcome: "success" });
   }, [compressResult, file]);
 
   const isReady = validation.status === "ready";
@@ -85,6 +117,7 @@ export default function CompressPage() {
       title="Compactar PDF"
       description="Reduza o tamanho do seu PDF sem entregar uma versão maior que o original."
       crossLink={{ label: "Dividir PDF por tamanho", to: "/dividir-pdf-por-tamanho" }}
+      crossLinkCtaId="cross_link_dividir"
     >
       {!file ? (
         <UploadZone onFileSelected={handleFileSelected} />

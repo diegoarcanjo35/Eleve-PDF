@@ -1,0 +1,23 @@
+# Configuração do Cloudflare Pages para o ElevePDF.
+#
+# `database_id` abaixo é um PLACEHOLDER — nenhum banco D1 real foi criado nesta
+# fase (não há wrangler autenticado neste ambiente, e a criação de recursos reais
+# na Cloudflare é uma decisão do Diego, feita quando ele configurar o projeto no
+# painel). Para desenvolvimento/teste local, `wrangler pages dev --local` usa
+# emulação local de D1 e ignora o valor de `database_id` real.
+name = "elevepdf"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "elevepdf-analytics"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Variáveis usadas pelos endpoints de Analytics — ver functions/api/analytics/.
+# CF_ACCESS_TEAM_DOMAIN e CF_ACCESS_AUD ficam ausentes de propósito: enquanto
+# não forem configuradas em produção, GET /api/analytics/summary responde 503
+# (painel bloqueado por padrão — ver relatório, "Proteção obrigatória").
+[vars]
+ANALYTICS_ALLOW_LOCAL_DEV = "false"

@@ -1,15 +1,24 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ShieldCheck } from "lucide-react";
+import { track } from "@/analytics/client";
+import type { CtaId } from "@shared/analytics/events";
 
 interface ToolPageLayoutProps {
   title: string;
   description: string;
   children: ReactNode;
   crossLink: { label: string; to: string };
+  crossLinkCtaId: CtaId;
 }
 
-export function ToolPageLayout({ title, description, children, crossLink }: ToolPageLayoutProps) {
+export function ToolPageLayout({
+  title,
+  description,
+  children,
+  crossLink,
+  crossLinkCtaId,
+}: ToolPageLayoutProps) {
   return (
     <div className="page-container">
       <div className="tool-page">
@@ -32,7 +41,10 @@ export function ToolPageLayout({ title, description, children, crossLink }: Tool
         {children}
 
         <p className="tool-page__cross-link">
-          Precisa de outra coisa? <Link to={crossLink.to}>{crossLink.label}</Link>
+          Precisa de outra coisa?{" "}
+          <Link to={crossLink.to} onClick={() => track("tool_open", { cta_id: crossLinkCtaId })}>
+            {crossLink.label}
+          </Link>
         </p>
       </div>
     </div>

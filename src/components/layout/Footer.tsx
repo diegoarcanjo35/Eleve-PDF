@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 
 export function Footer() {
@@ -20,6 +21,9 @@ export function Footer() {
             <ArrowUpRight size={14} aria-hidden="true" />
           </a>
           <span className="site-footer__domain">elevesites.com.br</span>
+          <Link className="site-footer__link" to="/privacidade">
+            Privacidade e métricas
+          </Link>
         </p>
       </div>
     </footer>

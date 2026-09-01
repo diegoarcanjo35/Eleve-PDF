@@ -9,11 +9,12 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -b --noEmit && tsc -p tsconfig.functions.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "gen:fixtures": "tsx scripts/generate-fixtures.ts"
+    "gen:fixtures": "tsx scripts/generate-fixtures.ts",
+    "d1:migrate:local": "wrangler d1 migrations apply elevepdf-analytics --local"
   },
   "dependencies": {
     "jszip": "^3.10.1",
@@ -25,6 +26,7 @@
     "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260901.1",
     "@eslint/js": "^9.18.0",
     "@playwright/test": "^1.49.1",
     "@testing-library/jest-dom": "^6.6.3",
@@ -44,6 +46,7 @@
     "typescript": "~5.6.3",
     "typescript-eslint": "^8.19.1",
     "vite": "^6.0.7",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "wrangler": "^4.127.1"
   }
 }

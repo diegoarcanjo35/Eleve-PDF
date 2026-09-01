@@ -2,6 +2,8 @@ import { useCallback, useRef, useState } from "react";
 import { requestValidate } from "@/lib/pdfWorkerClient";
 import { PdfAppError, messageFor } from "@/lib/errors";
 import type { StructuralFindings } from "@/lib/structuralFindings";
+import { track } from "@/analytics/client";
+import type { ToolId } from "@shared/analytics/events";
 
 export type ValidationState =
   | { status: "idle" }
@@ -16,7 +18,7 @@ export type ValidationState =
  * token de operação, e uma resposta assíncrona só atualiza o estado se ainda
  * for a mais recente.
  */
-export function usePdfUpload(onBeforeSelect?: () => void) {
+export function usePdfUpload(toolId: ToolId, onBeforeSelect?: () => void) {
   const [file, setFile] = useState<File | null>(null);
   const [validation, setValidation] = useState<ValidationState>({ status: "idle" });
   const fileBufferRef = useRef<ArrayBuffer | null>(null);
@@ -36,6 +38,7 @@ export function usePdfUpload(onBeforeSelect?: () => void) {
         if (fileTokenRef.current !== myToken) return;
         fileBufferRef.current = buffer;
         setValidation({ status: "ready", pageCount: result.pageCount, structure: result.structure });
+        track("file_validation_success", { tool_id: toolId, outcome: "success" });
       } catch (error) {
         if (fileTokenRef.current !== myToken) return;
         const appError =
@@ -43,9 +46,14 @@ export function usePdfUpload(onBeforeSelect?: () => void) {
             ? error
             : new PdfAppError("unknown", "Erro desconhecido ao validar o arquivo.");
         setValidation({ status: "error", message: messageFor(appError.code) });
+        track("file_validation_error", {
+          tool_id: toolId,
+          outcome: "error",
+          error_category: appError.code,
+        });
       }
     },
-    [onBeforeSelect],
+    [onBeforeSelect, toolId],
   );
 
   const handleRemove = useCallback(() => {
