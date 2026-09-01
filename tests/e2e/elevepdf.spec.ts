@@ -19,20 +19,28 @@ async function downloadToBuffer(page: import("@playwright/test").Page, trigger: 
 }
 
 test.describe("ElevePDF — primeiro viewport e validação", () => {
-  test("mostra marca, slogan e área de upload no primeiro viewport", async ({ page }) => {
+  // A partir da Fase 1 (layout de plataforma), a Home é uma página de entrada com
+  // as ferramentas em cartões — o upload em si vive nas rotas /compactar-pdf e
+  // /dividir-pdf-por-tamanho. Este teste passa a verificar marca, slogan e as
+  // chamadas para as duas ferramentas disponíveis já no primeiro viewport.
+  test("mostra marca, slogan e chamadas para as ferramentas disponíveis no primeiro viewport", async ({
+    page,
+  }) => {
     await page.goto("/");
-    await expect(page.getByText("Seu PDF no tamanho certo.")).toBeVisible();
-    await expect(page.getByText(/arraste um pdf aqui/i)).toBeVisible();
+    await expect(page.getByText("Seu PDF no tamanho certo")).toBeVisible();
+    const heroActions = page.locator(".hero__actions");
+    await expect(heroActions.getByRole("link", { name: "Compactar PDF", exact: true })).toBeVisible();
+    await expect(heroActions.getByRole("link", { name: "Dividir por tamanho", exact: true })).toBeVisible();
   });
 
   test("rejeita um arquivo que não é PDF com mensagem clara", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/compactar-pdf");
     await page.locator('input[type="file"]').setInputFiles(fixture("not-a-pdf.txt"));
     await expect(page.getByRole("alert")).toContainText(/não é um pdf válido/i);
   });
 
   test("valida um PDF real e exibe nome, tamanho e número de páginas", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/compactar-pdf");
     await page.locator('input[type="file"]').setInputFiles(fixture("multi-page-text.pdf"));
     await expect(page.getByText("multi-page-text.pdf")).toBeVisible();
     await expect(page.getByText(/14 páginas/)).toBeVisible();
@@ -41,9 +49,12 @@ test.describe("ElevePDF — primeiro viewport e validação", () => {
 
   test("funciona em viewport mobile", async ({ page, isMobile }) => {
     await page.goto("/");
-    await expect(page.getByText("Seu PDF no tamanho certo.")).toBeVisible();
+    await expect(page.getByText("Seu PDF no tamanho certo")).toBeVisible();
     if (isMobile) {
-      const box = await page.getByText(/selecionar arquivo/i).boundingBox();
+      const box = await page
+        .locator(".hero__actions")
+        .getByRole("link", { name: "Compactar PDF", exact: true })
+        .boundingBox();
       expect(box?.width).toBeGreaterThan(0);
     }
   });
@@ -53,11 +64,10 @@ test.describe("ElevePDF — divisão real (múltiplas partes, ZIP, ordem, limite
   test("divide em múltiplas partes reais, cada uma um PDF válido dentro do limite, com ordem correta, e o ZIP contém exatamente essas partes", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/dividir-pdf-por-tamanho");
     await page.locator('input[type="file"]').setInputFiles(fixture("large-unique-images.pdf"));
     await expect(page.getByText(/pronto para processar/i)).toBeVisible();
 
-    await page.getByRole("tab", { name: "Dividir por tamanho" }).click();
     await page.getByRole("radio", { name: "Personalizado" }).click();
     await page.getByLabel("Tamanho máximo").fill("150");
     await page.getByRole("radio", { name: "KB" }).click();
@@ -103,11 +113,10 @@ test.describe("ElevePDF — divisão real (múltiplas partes, ZIP, ordem, limite
   test("página isolada maior que o limite não é cortada nem entregue como se respeitasse o limite", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/dividir-pdf-por-tamanho");
     await page.locator('input[type="file"]').setInputFiles(fixture("large-unique-images.pdf"));
     await expect(page.getByText(/pronto para processar/i)).toBeVisible();
 
-    await page.getByRole("tab", { name: "Dividir por tamanho" }).click();
     await page.getByRole("radio", { name: "Personalizado" }).click();
     await page.getByLabel("Tamanho máximo").fill("64");
     await page.getByRole("radio", { name: "KB" }).click();
@@ -139,7 +148,7 @@ test.describe("ElevePDF — compactação real (bytes, imagens, reabertura)", ()
     test(`nível ${level}: recomprime imagens de verdade, reduz bytes, preserva páginas e texto pesquisável`, async ({
       page,
     }) => {
-      await page.goto("/");
+      await page.goto("/compactar-pdf");
       await page.locator('input[type="file"]').setInputFiles(fixture("with-images.pdf"));
       await expect(page.getByText(/pronto para processar/i)).toBeVisible();
 
@@ -188,7 +197,7 @@ test.describe("ElevePDF — compactação real (bytes, imagens, reabertura)", ()
   test("sem ganho real: o arquivo original é preservado byte a byte e a interface informa isso honestamente", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/compactar-pdf");
     await page.locator('input[type="file"]').setInputFiles(fixture("simple-1-page.pdf"));
     await expect(page.getByText(/pronto para processar/i)).toBeVisible();
 
@@ -212,11 +221,10 @@ test.describe("ElevePDF — estruturas sensíveis (AcroForm, outline, links)", (
   test("avisa sobre estruturas de nível de documento antes de dividir e exige confirmação explícita", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/dividir-pdf-por-tamanho");
     await page.locator('input[type="file"]').setInputFiles(fixture("sensitive-structures.pdf"));
     await expect(page.getByText(/pronto para processar/i)).toBeVisible();
 
-    await page.getByRole("tab", { name: "Dividir por tamanho" }).click();
     await expect(page.getByText(/cada parte da divisão.*pode não preservar/i)).toBeVisible();
 
     const splitButton = page.getByRole("button", { name: "Dividir PDF" });

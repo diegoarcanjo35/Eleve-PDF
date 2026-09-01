@@ -40,8 +40,10 @@ export function CompressPanel({ disabled, running, onCompress }: CompressPanelPr
 
       {!selected.lossless && (
         <p className="notice notice--info">
-          Este nível recomprime imagens (JPEG) embutidas no PDF{level === "maxima" ? " e reduz a resolução delas" : ""}.
-          Texto, links e formulários permanecem intactos; apenas a qualidade visual das imagens pode diminuir.
+          Este nível recomprime imagens JPEG elegíveis{level === "maxima" ? " e reduz a resolução delas" : ""}.
+          A ordem das páginas e o texto pesquisável são preservados nos casos testados, mas
+          estruturas especiais do PDF (formulários, links, marcadores, metadados, assinaturas)
+          não possuem garantia genérica de preservação.
         </p>
       )}
 
