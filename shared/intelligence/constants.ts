@@ -80,3 +80,36 @@ export const VECTORIZE_PROPAGATION_GRACE_MS = 60_000;
  * primeira consulta não retorna nenhum resultado — nunca um loop de
  * polling, nunca uma espera longa/indefinida. */
 export const RETRIEVAL_EMPTY_RETRY_DELAY_MS = 1500;
+
+// --- Geração fundamentada com Luna (Fase 01, Sprint 01D) ---
+export const ASK_CONTRACT_VERSION = "1";
+export const MAX_ASK_BODY_BYTES = 8 * 1024; // 8 KB — só a pergunta, nunca documento
+/** Hipótese operacional — tamanho máximo de pergunta aceito. */
+export const MAX_QUESTION_CHARS = 2000;
+
+/** Modelo de geração usado exclusivamente nesta vertical — nenhum fallback,
+ * nenhum outro modelo, nenhum outro provider. A abstração de provider
+ * permanece futura (ver docs/inteligencia-documental/01-blueprint-tecnico.md). */
+export const LUNA_MODEL = "gpt-5.6-luna";
+/** Hipótese operacional da primeira vertical — nunca medium/high/xhigh/max
+ * sem benchmark posterior (ver relatório Sprint 01D). */
+export const LUNA_REASONING_EFFORT = "low";
+/** Começa pequeno de propósito — não é limite comercial definitivo. Alto o
+ * suficiente para acomodar tokens de raciocínio (contam como output em
+ * modelos de reasoning) sem truncar a resposta estruturada antes do JSON
+ * ser emitido — ver achado real na auditoria: `status: "incomplete"` com
+ * `incomplete_details.reason: "max_output_tokens"` pode deixar a saída sem
+ * nenhum item `message`, só `reasoning`. */
+export const LUNA_MAX_OUTPUT_TOKENS = 800;
+/** Versionamento explícito da configuração de geração — persistido na
+ * telemetria, para nunca precisar adivinhar depois qual config gerou uma
+ * resposta específica. */
+export const LUNA_STRATEGY_VERSION = "v1-luna-low-structured-json";
+
+/** Máximo de chunks enviados como evidência ao Luna — reaproveita o mesmo
+ * teto já usado pelo retrieval (nunca maior que ele). */
+export const MAX_CONTEXT_CHUNKS = RETRIEVAL_TOP_K;
+/** Limite agregado defensivo de caracteres de evidência enviados ao Luna —
+ * acima do teórico atual (RETRIEVAL_TOP_K × CHUNK_MAX_CHARS), mas existe
+ * para nunca depender só desses outros limites não estourarem no futuro. */
+export const MAX_CONTEXT_CHARS_TOTAL = 8000;

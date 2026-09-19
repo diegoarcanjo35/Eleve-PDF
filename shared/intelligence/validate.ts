@@ -1,13 +1,21 @@
 import {
+  ASK_CONTRACT_VERSION,
   INGESTION_CONTRACT_VERSION,
   MAX_BLOCKS_TOTAL,
   MAX_BLOCK_CHARS,
   MAX_CHARS_TOTAL,
   MAX_PAGES_PER_DOCUMENT,
   MAX_QUERY_CHARS,
+  MAX_QUESTION_CHARS,
   RETRIEVAL_CONTRACT_VERSION,
 } from "./constants";
-import type { IngestionBlockV1, IngestionPageV1, IngestionPayloadV1, RetrievalQueryV1 } from "./types";
+import type {
+  AskQueryV1,
+  IngestionBlockV1,
+  IngestionPageV1,
+  IngestionPayloadV1,
+  RetrievalQueryV1,
+} from "./types";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -103,4 +111,24 @@ export function validateRetrievalQuery(raw: unknown): RetrievalQueryV1 | null {
   if (trimmed.length === 0 || trimmed.length > MAX_QUERY_CHARS) return null;
 
   return { contractVersion: RETRIEVAL_CONTRACT_VERSION, query: trimmed };
+}
+
+/**
+ * Valida (nunca confia em) a pergunta bruta de `/ask` vinda do cliente. Só
+ * aceita `contractVersion` e `question` (string não vazia, dentro do limite
+ * de tamanho). Modelo, provider, reasoning effort, topK, prompt, system
+ * instructions, filtros e escopo de sessão nunca vêm do cliente — são
+ * sempre controlados pelo servidor (ver `functions/api/.../ask.ts`).
+ */
+export function validateAskQuery(raw: unknown): AskQueryV1 | null {
+  if (!isPlainObject(raw)) return null;
+
+  const { contractVersion, question } = raw;
+  if (contractVersion !== ASK_CONTRACT_VERSION) return null;
+  if (typeof question !== "string") return null;
+
+  const trimmed = question.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_QUESTION_CHARS) return null;
+
+  return { contractVersion: ASK_CONTRACT_VERSION, question: trimmed };
 }

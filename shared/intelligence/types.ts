@@ -1,4 +1,4 @@
-import type { INGESTION_CONTRACT_VERSION, RETRIEVAL_CONTRACT_VERSION } from "./constants";
+import type { ASK_CONTRACT_VERSION, INGESTION_CONTRACT_VERSION, RETRIEVAL_CONTRACT_VERSION } from "./constants";
 
 /** Estado da sessão temporária, controlado exclusivamente pelo backend.
  * `indexing` (Sprint 01C) fica entre `ingesting` e `ready` — uma sessão só
@@ -53,6 +53,37 @@ export interface RetrievedChunk {
   chunkId: string;
   text: string;
   score: number;
+  pages: number[];
+  startPage: number;
+  endPage: number;
+}
+
+/** Payload versionado enviado por `POST /api/intelligence/sessions/:id/ask`.
+ * Nunca carrega modelo, provider, reasoning effort, topK, prompt, system
+ * instructions, filtros Vectorize, escopo de sessão, max output, ou
+ * ferramentas — tudo isso é controlado exclusivamente pelo servidor. */
+export interface AskQueryV1 {
+  contractVersion: typeof ASK_CONTRACT_VERSION;
+  question: string;
+}
+
+/**
+ * Contrato bruto devolvido pelo Luna via Structured Outputs. Nunca confiado
+ * cegamente — sempre validado no servidor (todo `evidenceId` precisa
+ * existir no conjunto de evidências enviado) antes de virar `AskEvidence[]`.
+ */
+export interface GroundedAnswer {
+  answer: string;
+  evidenceIds: string[];
+  insufficientEvidence: boolean;
+}
+
+/** Evidência resolvida pelo servidor a partir de um `evidenceId` (`E1`,
+ * `E2`, ...) validado — o Luna nunca define chunkId/página diretamente; o
+ * servidor já conhecia esse mapeamento antes da chamada ao modelo. */
+export interface AskEvidence {
+  evidenceId: string;
+  chunkId: string;
   pages: number[];
   startPage: number;
   endPage: number;
