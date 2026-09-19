@@ -33,7 +33,7 @@ export function Header() {
         </nav>
 
         <div className="site-header__right">
-          <PrivacyBadge />
+          <PrivacyBadge pathname={location.pathname} />
           <button
             ref={menuButtonRef}
             type="button"

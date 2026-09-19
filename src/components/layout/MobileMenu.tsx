@@ -70,7 +70,7 @@ export function MobileMenu({ open, onClose, triggerRef }: MobileMenuProps) {
         ))}
 
         <div className="mobile-menu__privacy">
-          <PrivacyBadge />
+          <PrivacyBadge pathname={location.pathname} />
         </div>
       </div>
     </>

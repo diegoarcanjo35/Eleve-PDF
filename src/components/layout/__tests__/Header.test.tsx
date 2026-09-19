@@ -4,16 +4,30 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { Header } from "../Header";
 
-function renderHeader() {
+function renderHeader(initialPath = "/") {
   return render(
-    <MemoryRouter initialEntries={["/"]}>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/" element={<Header />} />
         <Route path="/compactar-pdf" element={<Header />} />
+        <Route path="/conversar-com-pdf" element={<Header />} />
       </Routes>
     </MemoryRouter>,
   );
 }
+
+describe("Header — badge de privacidade por rota (Sprint 01F.1)", () => {
+  it("1. numa ferramenta clássica, mostra 'Processamento local'", () => {
+    renderHeader("/compactar-pdf");
+    expect(screen.getByText("Processamento local")).toBeInTheDocument();
+  });
+
+  it("2/3. em /conversar-com-pdf, mostra a comunicação específica da Eleve IA, nunca a afirmação de processamento só local", () => {
+    renderHeader("/conversar-com-pdf");
+    expect(screen.getByText("Processamento seguro com Eleve IA")).toBeInTheDocument();
+    expect(screen.queryByText("Processamento local")).not.toBeInTheDocument();
+  });
+});
 
 describe("Header — menu mobile e navegação por teclado", () => {
   it("abre e fecha o menu mobile pelo botão", async () => {
