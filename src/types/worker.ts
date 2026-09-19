@@ -1,6 +1,7 @@
 import type { CompressionLevel, CompressOutcome, CompressProgress } from "@/lib/pdfCompress";
 import type { SplitProgress } from "@/lib/pdfSplit";
 import type { MergeProgress } from "@/lib/pdfMerge";
+import type { ExtractProgress, ExtractedDocument } from "@/lib/pdfExtractText";
 import type { PdfErrorCode } from "@/lib/errors";
 import type { StructuralFindings } from "@/lib/structuralAnalysis";
 
@@ -32,6 +33,12 @@ export interface MergeRequest {
   filesBytes: ArrayBuffer[];
 }
 
+export interface ExtractRequest {
+  id: string;
+  type: "extract";
+  fileBytes: ArrayBuffer;
+}
+
 export interface CancelRequest {
   id: string;
   type: "cancel";
@@ -42,12 +49,13 @@ export type WorkerRequest =
   | CompressRequest
   | SplitRequest
   | MergeRequest
+  | ExtractRequest
   | CancelRequest;
 
 export interface ProgressMessage {
   id: string;
   type: "progress";
-  progress: SplitProgress | CompressProgress | MergeProgress;
+  progress: SplitProgress | CompressProgress | MergeProgress | ExtractProgress;
 }
 
 export interface ValidateSuccessMessage {
@@ -90,6 +98,12 @@ export interface MergeSuccessMessage {
   fileCount: number;
 }
 
+export interface ExtractSuccessMessage {
+  id: string;
+  type: "extract-success";
+  document: ExtractedDocument;
+}
+
 export interface ErrorMessage {
   id: string;
   type: "error";
@@ -103,4 +117,5 @@ export type WorkerResponse =
   | CompressSuccessMessage
   | SplitSuccessMessage
   | MergeSuccessMessage
+  | ExtractSuccessMessage
   | ErrorMessage;

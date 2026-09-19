@@ -4,6 +4,7 @@ import { validatePdfBytes } from "@/lib/validation";
 import { compressPdf } from "@/lib/pdfCompress";
 import { splitPdfBySize } from "@/lib/pdfSplit";
 import { mergePdfs } from "@/lib/pdfMerge";
+import { extractDocumentText } from "@/lib/pdfExtractText";
 import { PdfAppError } from "@/lib/errors";
 import type { WorkerRequest, WorkerResponse } from "@/types/worker";
 
@@ -131,6 +132,17 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
         },
         [outBuffer],
       );
+      return;
+    }
+
+    if (request.type === "extract") {
+      const bytes = new Uint8Array(request.fileBytes);
+      const document = await extractDocumentText(
+        bytes,
+        (progress) => post({ id: request.id, type: "progress", progress }),
+        () => cancelledIds.has(request.id),
+      );
+      post({ id: request.id, type: "extract-success", document });
       return;
     }
   } catch (error) {

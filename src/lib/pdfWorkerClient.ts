@@ -1,5 +1,6 @@
 import type {
   CompressSuccessMessage,
+  ExtractSuccessMessage,
   MergeSuccessMessage,
   SplitSuccessMessage,
   ValidateSuccessMessage,
@@ -10,8 +11,9 @@ import { PdfAppError } from "./errors";
 import type { CompressionLevel, CompressProgress } from "./pdfCompress";
 import type { SplitProgress } from "./pdfSplit";
 import type { MergeProgress } from "./pdfMerge";
+import type { ExtractProgress } from "./pdfExtractText";
 
-type AnyProgress = SplitProgress | CompressProgress | MergeProgress;
+type AnyProgress = SplitProgress | CompressProgress | MergeProgress | ExtractProgress;
 
 let worker: Worker | null = null;
 let requestCounter = 0;
@@ -40,6 +42,8 @@ function transferablesFor(request: WorkerRequest): Transferable[] {
       return [request.fileBytes];
     case "merge":
       return request.filesBytes;
+    case "extract":
+      return [request.fileBytes];
     case "cancel":
       return [];
   }
@@ -126,6 +130,17 @@ export function requestMerge(files: ArrayBuffer[], onProgress?: (progress: Merge
   return runRequest<MergeSuccessMessage>(
     { id, type: "merge", filesBytes: files },
     "merge-success",
+    onProgress as (progress: AnyProgress) => void,
+  );
+}
+
+/** Extração textual local com proveniência por página (Fase 01, Sprint 01A)
+ *  — nunca envia o PDF a nenhum servidor; roda inteiramente no worker. */
+export function requestExtractText(file: ArrayBuffer, onProgress?: (progress: ExtractProgress) => void) {
+  const id = nextId();
+  return runRequest<ExtractSuccessMessage>(
+    { id, type: "extract", fileBytes: file },
+    "extract-success",
     onProgress as (progress: AnyProgress) => void,
   );
 }
