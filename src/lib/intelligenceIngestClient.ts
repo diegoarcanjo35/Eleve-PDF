@@ -6,8 +6,23 @@ const SESSIONS_ENDPOINT = "/api/intelligence/sessions";
 
 export interface CreateSessionResult {
   sessionId: string;
+  /** Segredo de autorização (Sprint 01E.1) — retornado só nesta resposta,
+   * nunca de novo. Mantido apenas em memória (variável local desta função),
+   * nunca em localStorage/sessionStorage/URL/Analytics/log — ver
+   * `ingestExtractedDocument`. */
+  sessionCapability: string;
   status: string;
   expiresAt: string;
+}
+
+/** Header `Authorization: Bearer <capability>` — única forma de transporte
+ * aceita pelo backend (nunca query string/URL/path/cookie, ver
+ * `functions/_shared/sessionCapability.ts`). Centralizado aqui para que
+ * qualquer chamada futura a um endpoint protegido (retrieve/ask) monte o
+ * header de forma idêntica, sem repetir a string `"Bearer "` em cada
+ * chamador. */
+function authorizationHeader(sessionCapability: string): Record<string, string> {
+  return { Authorization: `Bearer ${sessionCapability}` };
 }
 
 export interface IngestResult {
@@ -40,10 +55,10 @@ export async function createIntelligenceSession(): Promise<CreateSessionResult> 
   return (await response.json()) as CreateSessionResult;
 }
 
-async function ingestPayload(sessionId: string, payload: IngestionPayloadV1): Promise<IngestResult> {
+async function ingestPayload(sessionId: string, sessionCapability: string, payload: IngestionPayloadV1): Promise<IngestResult> {
   const response = await fetch(`${SESSIONS_ENDPOINT}/${sessionId}/ingest`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authorizationHeader(sessionCapability) },
     body: JSON.stringify(payload),
     credentials: "omit",
   });
@@ -58,9 +73,19 @@ async function ingestPayload(sessionId: string, payload: IngestionPayloadV1): Pr
  * extraído/normalizado localmente (Sprint 01A) para chunking no backend. O
  * PDF original nunca é lido por esta função — só `ExtractedDocument`, que já
  * não contém bytes do arquivo.
+ *
+ * AUTORIZAÇÃO (Sprint 01E.1A): a `sessionCapability` devolvida por
+ * `createIntelligenceSession` nunca é persistida — vive só como valor local
+ * dentro desta chamada, até ser usada no header `Authorization` do ingest
+ * logo em seguida. Se o backend responder sem capability (contrato
+ * divergente), a ingestão é recusada aqui mesmo, localmente — nunca
+ * prossegue usando só o `sessionId` como se isso autorizasse a operação.
  */
 export async function ingestExtractedDocument(document: ExtractedDocument): Promise<IngestResult> {
   const session = await createIntelligenceSession();
+  if (!session.sessionCapability) {
+    throw new Error("Sessão criada sem capability de autorização — ingestão recusada por segurança.");
+  }
   const payload = toIngestionPayload(document);
-  return ingestPayload(session.sessionId, payload);
+  return ingestPayload(session.sessionId, session.sessionCapability, payload);
 }
