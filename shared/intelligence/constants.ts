@@ -113,3 +113,22 @@ export const MAX_CONTEXT_CHUNKS = RETRIEVAL_TOP_K;
  * acima do teórico atual (RETRIEVAL_TOP_K × CHUNK_MAX_CHARS), mas existe
  * para nunca depender só desses outros limites não estourarem no futuro. */
 export const MAX_CONTEXT_CHARS_TOTAL = 8000;
+
+// --- Rate limit distribuído autoritativo (Fase 01, Sprint 01E.1) ---
+/**
+ * HIPÓTESE INICIAL — todos os valores abaixo, validar por benchmark/uso
+ * real antes de qualquer lançamento público (ver relatório de auditoria
+ * Sprint 01E, e relatório de implementação Sprint 01E.1). Deliberadamente
+ * conservadores para testar a arquitetura, nunca limites comerciais
+ * definitivos — nunca confundir com plano/crédito (ver
+ * docs/inteligencia-documental/adr/0004-plano-separado-de-creditos.md).
+ */
+export const RATE_LIMIT_WINDOW_MS = 60_000; // janela fixa de 1 minuto
+/** HIPÓTESE INICIAL — por identidade de rede pseudonimizada. */
+export const RATE_LIMIT_SESSION_CREATE_MAX = 10;
+/** HIPÓTESE INICIAL — por identidade de rede + sessão autorizada. */
+export const RATE_LIMIT_INGEST_MAX = 5;
+/** HIPÓTESE INICIAL — por identidade de rede + sessão autorizada. */
+export const RATE_LIMIT_RETRIEVE_MAX = 20;
+/** HIPÓTESE INICIAL — mais restritivo que retrieve: maior custo real (Luna). */
+export const RATE_LIMIT_ASK_MAX = 10;

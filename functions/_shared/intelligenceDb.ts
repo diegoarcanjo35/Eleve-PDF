@@ -27,6 +27,10 @@ export interface SessionRow {
    * pode ainda estar em janela de propagação assíncrona. `null` para
    * sessões que nunca chegaram a `ready`. */
   ready_at: string | null;
+  /** Hash SHA-256 da `sessionCapability` (Sprint 01E.1) — nunca o segredo
+   * bruto. `null` para sessões legadas (anteriores a esta sprint), que
+   * nunca são tratadas como autorizadas (ver `_shared/sessionCapability.ts`). */
+  capability_hash: string | null;
 }
 
 export interface ChunkRow {
@@ -42,11 +46,13 @@ export interface ChunkRow {
 
 export async function createSession(
   db: IntelligenceD1,
-  params: { id: string; createdAtIso: string; expiresAtIso: string },
+  params: { id: string; createdAtIso: string; expiresAtIso: string; capabilityHash: string },
 ): Promise<void> {
   await db
-    .prepare(`INSERT INTO intelligence_sessions (id, status, created_at, expires_at) VALUES (?, 'created', ?, ?)`)
-    .bind(params.id, params.createdAtIso, params.expiresAtIso)
+    .prepare(
+      `INSERT INTO intelligence_sessions (id, status, created_at, expires_at, capability_hash) VALUES (?, 'created', ?, ?, ?)`,
+    )
+    .bind(params.id, params.createdAtIso, params.expiresAtIso, params.capabilityHash)
     .run();
 }
 
@@ -54,7 +60,7 @@ export async function getSession(db: IntelligenceD1, id: string): Promise<Sessio
   const row = await db
     .prepare(
       `SELECT id, status, created_at, expires_at, page_count, chunk_count, strategy_version,
-              vector_count, embedding_strategy_version, ready_at
+              vector_count, embedding_strategy_version, ready_at, capability_hash
        FROM intelligence_sessions WHERE id = ?`,
     )
     .bind(id)

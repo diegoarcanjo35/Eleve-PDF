@@ -1,0 +1,22 @@
+-- Migration 0004 (Inteligência Documental) — Fase 01, Sprint 01E.1.
+--
+-- Adiciona `capability_hash` a `intelligence_sessions`: hash SHA-256 (nunca
+-- o segredo bruto) da `sessionCapability` retornada ao cliente somente no
+-- momento da criação da sessão (ver functions/_shared/sessionCapability.ts).
+-- A partir desta sprint, conhecer apenas o `sessionId` NUNCA mais autoriza
+-- operar a sessão — fecha o BLOCKER de segurança identificado na auditoria
+-- Sprint 01E (item 14 do relatório).
+--
+-- Simples ALTER TABLE ADD COLUMN (sem CHECK constraint) — mesma técnica já
+-- usada na migration 0003, suportada diretamente por SQLite/D1, sem
+-- precisar recriar a tabela.
+--
+-- Sessões existentes (anteriores a esta sprint) ficam com `capability_hash`
+-- NULL. Decisão explícita desta sprint: NULL nunca é tratado como
+-- autorizado — nenhum fallback para `sessionId` sozinho (ver
+-- functions/_shared/sessionCapability.ts, verifySessionCapability). Como
+-- sessões são temporárias (TTL de 30 minutos, ver SESSION_TTL_MS) e o
+-- produto ainda não foi lançado publicamente, nenhuma sessão real em uso
+-- fica presa nesse estado por muito tempo.
+
+ALTER TABLE intelligence_sessions ADD COLUMN capability_hash TEXT;

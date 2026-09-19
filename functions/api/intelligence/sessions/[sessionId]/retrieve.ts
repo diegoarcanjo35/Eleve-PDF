@@ -1,7 +1,14 @@
-import { EMBEDDING_MODEL, MAX_RETRIEVE_BODY_BYTES } from "../../../../../shared/intelligence/constants";
+import {
+  EMBEDDING_MODEL,
+  MAX_RETRIEVE_BODY_BYTES,
+  RATE_LIMIT_RETRIEVE_MAX,
+  RATE_LIMIT_WINDOW_MS,
+} from "../../../../../shared/intelligence/constants";
 import { validateRetrievalQuery } from "../../../../../shared/intelligence/validate";
 import { isAllowedRequestOrigin } from "../../../../_shared/origin";
 import { isRateLimited } from "../../../../_shared/rateLimit";
+import { enforceDistributedRateLimit } from "../../../../_shared/distributedRateLimit";
+import { verifySessionCapability } from "../../../../_shared/sessionCapability";
 import { getSession, type IntelligenceD1 } from "../../../../_shared/intelligenceDb";
 import { retrieveChunks } from "../../../../_shared/intelligenceRetrieval";
 import { logIntelligenceTelemetry } from "../../../../_shared/intelligenceTelemetry";
@@ -11,13 +18,21 @@ interface Env {
   INTEL_DB: IntelligenceD1;
   AI: Ai;
   VECTORIZE: Vectorize;
-  // Ver comentário equivalente em ../sessions.ts.
+  // Ver comentário equivalente em ../../sessions.ts.
+  RATE_LIMIT_HMAC_KEY?: string;
   ANALYTICS_ALLOW_LOCAL_DEV?: string;
   ANALYTICS_ALLOW_PAGES_PREVIEW?: string;
 }
 
 function genericError(status: number): Response {
   return new Response(null, { status });
+}
+
+/** Ver comentário equivalente em ../../sessions.ts sobre a mesma função em
+ * ./ingest.ts — resposta genérica reaproveitada para sessão inexistente e
+ * para capability ausente/incorreta, de propósito. */
+function unauthorizedError(): Response {
+  return genericError(401);
 }
 
 /**
@@ -28,6 +43,10 @@ function genericError(status: number): Response {
  * A lógica real de embedding + query + retry + consistência eventual vive
  * em `functions/_shared/intelligenceRetrieval.ts` — reaproveitada também
  * por `/ask` (Sprint 01D), nunca reimplementada aqui.
+ *
+ * AUTORIZAÇÃO (Sprint 01E.1): mesma regra de `ingest.ts` — capability
+ * validada ANTES de qualquer rate limit ou embedding/Vectorize usar a
+ * sessão como identidade confiável.
  */
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
@@ -57,11 +76,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return genericError(413);
   }
 
-  const rateLimitKey = `intel-retrieve:${request.headers.get("CF-Connecting-IP") ?? "unknown"}`;
-  if (isRateLimited(rateLimitKey)) {
-    return genericError(429);
-  }
-
   let parsedBody: unknown;
   try {
     parsedBody = JSON.parse(rawBody);
@@ -72,18 +86,43 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const query = validateRetrievalQuery(parsedBody);
   if (!query) return genericError(400);
 
-  // 1. Sessão existe? 2. Não expirou? 3. Estado adequado (`ready`)? — só
-  // depois disso o escopo de retrieval é construído e o Vectorize é
-  // consultado. Nenhum desses três "nãos" chega perto de gerar embedding
-  // ou de tocar o Vectorize.
+  // Sessão localizada ANTES da capability poder ser verificada, e ambas
+  // ANTES de qualquer rate limit que use `sessionId` como identidade.
   let session;
   try {
     session = await getSession(env.INTEL_DB, sessionId);
   } catch {
     return genericError(500);
   }
-  if (!session) return genericError(404);
+  if (!session) return unauthorizedError();
 
+  const authorized = await verifySessionCapability(request.headers.get("Authorization"), session.capability_hash);
+  if (!authorized) return unauthorizedError();
+
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+
+  // Barreira barata (em memória, best-effort) — nunca a única proteção.
+  const rateLimitKey = `intel-retrieve:${ip}`;
+  if (isRateLimited(rateLimitKey)) {
+    return genericError(429);
+  }
+
+  // Barreira autoritativa e distribuída (D1) — fail-closed nesta primeira
+  // vertical, igual a ingest/ask: qualquer falha bloqueia, nunca segue para
+  // embedding/Vectorize sem confirmação do limite.
+  const distributed = await enforceDistributedRateLimit(
+    env.INTEL_DB,
+    env.RATE_LIMIT_HMAC_KEY,
+    { operation: "retrieve", ip, sessionId },
+    { windowMs: RATE_LIMIT_WINDOW_MS, maxRequests: RATE_LIMIT_RETRIEVE_MAX },
+  );
+  if (distributed === "blocked") return genericError(429);
+  if (distributed === "error") return genericError(503);
+
+  // 1. Sessão existe? 2. Não expirou? 3. Estado adequado (`ready`)? — só
+  // depois disso o escopo de retrieval é construído e o Vectorize é
+  // consultado. Nenhum desses três "nãos" chega perto de gerar embedding
+  // ou de tocar o Vectorize.
   if (isExpired(new Date(session.expires_at).getTime())) {
     return genericError(410);
   }

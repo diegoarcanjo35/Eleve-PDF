@@ -3,11 +3,15 @@ import {
   CHUNKING_STRATEGY_VERSION,
   EMBEDDING_MODEL,
   EMBEDDING_STRATEGY_VERSION,
+  RATE_LIMIT_INGEST_MAX,
+  RATE_LIMIT_WINDOW_MS,
 } from "../../../../../shared/intelligence/constants";
 import { validateIngestionPayload } from "../../../../../shared/intelligence/validate";
 import { chunkDocument } from "../../../../../shared/intelligence/chunking";
 import { isAllowedRequestOrigin } from "../../../../_shared/origin";
 import { isRateLimited } from "../../../../_shared/rateLimit";
+import { enforceDistributedRateLimit } from "../../../../_shared/distributedRateLimit";
+import { verifySessionCapability } from "../../../../_shared/sessionCapability";
 import {
   claimSessionForIngest,
   getSession,
@@ -27,6 +31,7 @@ interface Env {
   AI: Ai;
   VECTORIZE: Vectorize;
   // Ver comentário equivalente em ../../sessions.ts.
+  RATE_LIMIT_HMAC_KEY?: string;
   ANALYTICS_ALLOW_LOCAL_DEV?: string;
   ANALYTICS_ALLOW_PAGES_PREVIEW?: string;
 }
@@ -35,11 +40,26 @@ function genericError(status: number): Response {
   return new Response(null, { status });
 }
 
+/** Resposta genérica de autorização — reaproveitada tanto para sessão
+ * inexistente quanto para capability ausente/incorreta, de propósito: nunca
+ * revela qual dos dois motivos causou a falha (ver relatório de auditoria
+ * Sprint 01E, item 14, e relatório de implementação Sprint 01E.1). */
+function unauthorizedError(): Response {
+  return genericError(401);
+}
+
 /**
  * POST /api/intelligence/sessions/:sessionId/ingest — recebe o texto
  * estruturado por página (nunca o PDF, nunca o nome do arquivo), valida tudo
  * no backend, executa o chunking e persiste os chunks com proveniência de
  * página. Nunca ecoa o conteúdo do documento na resposta.
+ *
+ * AUTORIZAÇÃO (Sprint 01E.1): conhecer o `sessionId` nunca mais é
+ * suficiente — a capability enviada via `Authorization: Bearer` precisa
+ * bater com o hash armazenado ANTES de qualquer rate limit ou operação usar
+ * a sessão como identidade confiável (ver relatório de auditoria Sprint
+ * 01E, item 14). Nenhuma chamada a Workers AI/Vectorize ocorre antes dessa
+ * barreira e do rate limit distribuído.
  */
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
@@ -69,18 +89,40 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return genericError(413);
   }
 
-  const rateLimitKey = `intel-ingest:${request.headers.get("CF-Connecting-IP") ?? "unknown"}`;
-  if (isRateLimited(rateLimitKey)) {
-    return genericError(429);
-  }
-
+  // A sessão precisa ser localizada ANTES da capability poder ser
+  // verificada (é dela que vem `capability_hash`) — e ambas precisam vir
+  // ANTES de qualquer rate limit que use `sessionId` como identidade (ver
+  // ordem de barreiras no relatório de implementação).
   let session;
   try {
     session = await getSession(env.INTEL_DB, sessionId);
   } catch {
     return genericError(500);
   }
-  if (!session) return genericError(404);
+  if (!session) return unauthorizedError();
+
+  const authorized = await verifySessionCapability(request.headers.get("Authorization"), session.capability_hash);
+  if (!authorized) return unauthorizedError();
+
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+
+  // Barreira barata (em memória, best-effort) — nunca a única proteção.
+  const rateLimitKey = `intel-ingest:${ip}`;
+  if (isRateLimited(rateLimitKey)) {
+    return genericError(429);
+  }
+
+  // Barreira autoritativa e distribuída (D1) — só compõe `sessionId` na
+  // chave DEPOIS de a capability já ter provado que o chamador está
+  // autorizado para esta sessão específica (nunca antes).
+  const distributed = await enforceDistributedRateLimit(
+    env.INTEL_DB,
+    env.RATE_LIMIT_HMAC_KEY,
+    { operation: "ingest", ip, sessionId },
+    { windowMs: RATE_LIMIT_WINDOW_MS, maxRequests: RATE_LIMIT_INGEST_MAX },
+  );
+  if (distributed === "blocked") return genericError(429);
+  if (distributed === "error") return genericError(503);
 
   const nowMs = Date.now();
   if (isExpired(new Date(session.expires_at).getTime(), nowMs)) {

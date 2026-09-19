@@ -4,11 +4,15 @@ import {
   MAX_ASK_BODY_BYTES,
   MAX_CONTEXT_CHARS_TOTAL,
   MAX_CONTEXT_CHUNKS,
+  RATE_LIMIT_ASK_MAX,
+  RATE_LIMIT_WINDOW_MS,
 } from "../../../../../shared/intelligence/constants";
 import { validateAskQuery } from "../../../../../shared/intelligence/validate";
 import type { AskEvidence, RetrievedChunk } from "../../../../../shared/intelligence/types";
 import { isAllowedRequestOrigin } from "../../../../_shared/origin";
 import { isRateLimited } from "../../../../_shared/rateLimit";
+import { enforceDistributedRateLimit } from "../../../../_shared/distributedRateLimit";
+import { verifySessionCapability } from "../../../../_shared/sessionCapability";
 import { getSession, type IntelligenceD1 } from "../../../../_shared/intelligenceDb";
 import { retrieveChunks } from "../../../../_shared/intelligenceRetrieval";
 import { askLuna } from "../../../../_shared/lunaClient";
@@ -22,13 +26,21 @@ interface Env {
   /** Só backend. Nunca no bundle do cliente, nunca em log, nunca ecoada em
    * erro. Ausente => 503 explícito, nunca chamada real tentada. */
   OPENAI_API_KEY?: string;
-  // Ver comentário equivalente em ../sessions.ts.
+  // Ver comentário equivalente em ../../sessions.ts.
+  RATE_LIMIT_HMAC_KEY?: string;
   ANALYTICS_ALLOW_LOCAL_DEV?: string;
   ANALYTICS_ALLOW_PAGES_PREVIEW?: string;
 }
 
 function genericError(status: number): Response {
   return new Response(null, { status });
+}
+
+/** Ver comentário equivalente em ./ingest.ts — resposta genérica
+ * reaproveitada para sessão inexistente e para capability ausente/incorreta,
+ * de propósito. */
+function unauthorizedError(): Response {
+  return genericError(401);
 }
 
 function json(data: unknown, status = 200): Response {
@@ -57,15 +69,18 @@ function selectContextChunks(results: RetrievedChunk[]): RetrievedChunk[] {
  * POST /api/intelligence/sessions/:sessionId/ask — primeira geração de
  * resposta fundamentada do Eleve PDF IA. Sem UI, sem histórico multi-turno.
  *
- * ORDEM DE SEGURANÇA OBRIGATÓRIA (nunca alterada): validar requisição ->
- * verificar sessão/expiração/estado -> verificar secret -> embedding da
- * pergunta -> Vectorize filtrado por sessionId -> chunks do D1 -> montar
- * contexto SOMENTE com chunks autorizados -> Luna -> validar evidências ->
- * responder. O LLM nunca decide quais documentos consultar (retrieval
- * sempre vem antes, via `intelligenceRetrieval.ts` — a MESMA lógica de
- * `/retrieve`, nunca reimplementada). Nenhum chunk de outra sessão chega
- * perto do Luna: o filtro `sessionId` é aplicado na própria query do
- * Vectorize.
+ * ORDEM DE SEGURANÇA OBRIGATÓRIA (nunca alterada, estendida na Sprint
+ * 01E.1): validar requisição -> localizar sessão -> validar capability ->
+ * rate limit (em memória, depois D1 autoritativo) -> verificar
+ * expiração/estado -> verificar secret -> embedding da pergunta -> Vectorize
+ * filtrado por sessionId -> chunks do D1 -> montar contexto SOMENTE com
+ * chunks autorizados -> Luna -> validar evidências -> responder. O LLM nunca
+ * decide quais documentos consultar (retrieval sempre vem antes, via
+ * `intelligenceRetrieval.ts` — a MESMA lógica de `/retrieve`, nunca
+ * reimplementada). Nenhum chunk de outra sessão chega perto do Luna: o
+ * filtro `sessionId` é aplicado na própria query do Vectorize. Nenhuma
+ * chamada a Workers AI/Vectorize/Luna ocorre antes da capability e do rate
+ * limit distribuído (ver relatório de auditoria Sprint 01E, item 14).
  *
  * PROMPT INJECTION: o texto recuperado do PDF é DADO NÃO CONFIÁVEL — as
  * instruções de sistema enviadas ao Luna (`lunaClient.ts`) estabelecem essa
@@ -104,11 +119,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return genericError(413);
   }
 
-  const rateLimitKey = `intel-ask:${request.headers.get("CF-Connecting-IP") ?? "unknown"}`;
-  if (isRateLimited(rateLimitKey)) {
-    return genericError(429);
-  }
-
   let parsedBody: unknown;
   try {
     parsedBody = JSON.parse(rawBody);
@@ -119,16 +129,42 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const ask = validateAskQuery(parsedBody);
   if (!ask) return genericError(400);
 
-  // Sessão existe? Não expirou? Estado adequado (`ready`)? Nenhum desses
-  // "nãos" chega perto de embedding, Vectorize, ou Luna.
+  // Sessão localizada ANTES da capability poder ser verificada, e ambas
+  // ANTES de qualquer rate limit que use `sessionId` como identidade.
   let session;
   try {
     session = await getSession(env.INTEL_DB, sessionId);
   } catch {
     return genericError(500);
   }
-  if (!session) return genericError(404);
+  if (!session) return unauthorizedError();
 
+  const authorized = await verifySessionCapability(request.headers.get("Authorization"), session.capability_hash);
+  if (!authorized) return unauthorizedError();
+
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+
+  // Barreira barata (em memória, best-effort) — nunca a única proteção.
+  const rateLimitKey = `intel-ask:${ip}`;
+  if (isRateLimited(rateLimitKey)) {
+    return genericError(429);
+  }
+
+  // Barreira autoritativa e distribuída (D1), mais restritiva que
+  // ingest/retrieve — maior custo real por chamada (Luna). Fail-closed
+  // obrigatório: qualquer falha bloqueia, nunca segue para
+  // embedding/Vectorize/Luna sem confirmação do limite.
+  const distributed = await enforceDistributedRateLimit(
+    env.INTEL_DB,
+    env.RATE_LIMIT_HMAC_KEY,
+    { operation: "ask", ip, sessionId },
+    { windowMs: RATE_LIMIT_WINDOW_MS, maxRequests: RATE_LIMIT_ASK_MAX },
+  );
+  if (distributed === "blocked") return genericError(429);
+  if (distributed === "error") return genericError(503);
+
+  // Sessão existe? Não expirou? Estado adequado (`ready`)? Nenhum desses
+  // "nãos" chega perto de embedding, Vectorize, ou Luna.
   if (isExpired(new Date(session.expires_at).getTime())) {
     return genericError(410);
   }

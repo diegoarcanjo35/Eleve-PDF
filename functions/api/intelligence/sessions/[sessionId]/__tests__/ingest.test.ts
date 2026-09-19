@@ -7,22 +7,16 @@ import {
   EMBEDDING_DIMENSIONS,
   EMBEDDING_STRATEGY_VERSION,
 } from "../../../../../../shared/intelligence/constants";
+import {
+  authHeader,
+  makeFakeIntelligenceDb,
+  seedAuthorizedSession,
+  seedSession,
+  TEST_HMAC_SECRET,
+} from "./fakeIntelligenceDb";
 
 const VALID_ORIGIN = "https://elevepdf.elevesites.com.br";
 const VALID_HOST = "elevepdf.elevesites.com.br";
-
-interface FakeSessionRow {
-  id: string;
-  status: string;
-  created_at: string;
-  expires_at: string;
-  page_count: number | null;
-  chunk_count: number | null;
-  strategy_version: string | null;
-  vector_count: number | null;
-  embedding_strategy_version: string | null;
-  ready_at: string | null;
-}
 
 /** Fake do binding Workers AI — devolve embeddings determinísticos com a
  * dimensionalidade real (1024), sem nenhuma chamada de rede. */
@@ -43,128 +37,6 @@ function makeFakeVectorize() {
     return { mutationId: "fake-mutation-id" };
   });
   return { vectorize: { upsert } as unknown as Vectorize, upserted };
-}
-
-/** Fake D1 com estado real (não só stubs fixos) — interpreta as queries
- * exatas usadas por functions/_shared/intelligenceDb.ts o suficiente para
- * exercitar de verdade a máquina de estados (transições guardadas por
- * `WHERE status = ...`, `meta.changes`), sem depender de infraestrutura D1. */
-function makeFakeIntelligenceDb() {
-  const sessions = new Map<string, FakeSessionRow>();
-  const insertedChunks: unknown[][] = [];
-
-  const db = {
-    prepare(query: string) {
-      return {
-        bind(...values: unknown[]) {
-          return {
-            async run() {
-              if (query.includes("INSERT INTO intelligence_sessions")) {
-                const [id, createdAt, expiresAt] = values as [string, string, string];
-                sessions.set(id, {
-                  id,
-                  status: "created",
-                  created_at: createdAt,
-                  expires_at: expiresAt,
-                  page_count: null,
-                  chunk_count: null,
-                  strategy_version: null,
-                  vector_count: null,
-                  embedding_strategy_version: null,
-                  ready_at: null,
-                });
-                return { meta: { changes: 1 } };
-              }
-              if (query.includes("SET status = 'ingesting'")) {
-                const [id, nowIso] = values as [string, string];
-                const row = sessions.get(id);
-                if (row && row.status === "created" && row.expires_at > nowIso) {
-                  row.status = "ingesting";
-                  return { meta: { changes: 1 } };
-                }
-                return { meta: { changes: 0 } };
-              }
-              if (query.includes("SET status = 'created' WHERE")) {
-                const [id] = values as [string];
-                const row = sessions.get(id);
-                if (row && row.status === "ingesting") {
-                  row.status = "created";
-                  return { meta: { changes: 1 } };
-                }
-                return { meta: { changes: 0 } };
-              }
-              if (query.includes("SET status = 'indexing'")) {
-                const [id] = values as [string];
-                const row = sessions.get(id);
-                if (row && row.status === "ingesting") {
-                  row.status = "indexing";
-                  return { meta: { changes: 1 } };
-                }
-                return { meta: { changes: 0 } };
-              }
-              if (query.includes("SET status = 'ready'")) {
-                const [pageCount, chunkCount, strategyVersion, vectorCount, embeddingStrategyVersion, readyAtIso, id] =
-                  values as [number, number, string, number, string, string, string];
-                const row = sessions.get(id);
-                if (row && row.status === "indexing") {
-                  row.status = "ready";
-                  row.page_count = pageCount;
-                  row.chunk_count = chunkCount;
-                  row.strategy_version = strategyVersion;
-                  row.vector_count = vectorCount;
-                  row.embedding_strategy_version = embeddingStrategyVersion;
-                  row.ready_at = readyAtIso;
-                  return { meta: { changes: 1 } };
-                }
-                return { meta: { changes: 0 } };
-              }
-              if (query.includes("SET status = 'failed'")) {
-                const [id] = values as [string];
-                const row = sessions.get(id);
-                if (row && (row.status === "ingesting" || row.status === "indexing")) {
-                  row.status = "failed";
-                  return { meta: { changes: 1 } };
-                }
-                return { meta: { changes: 0 } };
-              }
-              if (query.includes("INSERT INTO intelligence_chunks")) {
-                insertedChunks.push(values);
-                return { meta: { changes: 1 } };
-              }
-              throw new Error(`fakeDb.run: query não tratada: ${query}`);
-            },
-            async first<T>() {
-              if (query.includes("SELECT id, status, created_at, expires_at")) {
-                const [id] = values as [string];
-                return (sessions.get(id) ?? null) as T | null;
-              }
-              throw new Error(`fakeDb.first: query não tratada: ${query}`);
-            },
-          };
-        },
-      };
-    },
-  };
-
-  return { db, sessions, insertedChunks };
-}
-
-function seedSession(sessions: Map<string, FakeSessionRow>, overrides: Partial<FakeSessionRow> = {}): string {
-  const id = overrides.id ?? "11111111-1111-4111-8111-111111111111";
-  sessions.set(id, {
-    id,
-    status: "created",
-    created_at: new Date().toISOString(),
-    expires_at: new Date(Date.now() + 60_000).toISOString(),
-    page_count: null,
-    chunk_count: null,
-    strategy_version: null,
-    vector_count: null,
-    embedding_strategy_version: null,
-    ready_at: null,
-    ...overrides,
-  });
-  return id;
 }
 
 function makeRequest(sessionId: string, body: unknown, overrides: Partial<Record<string, string>> = {}, rawBody?: string) {
@@ -194,7 +66,7 @@ function validPayload() {
 
 function callIngest(
   sessionId: string,
-  env: { INTEL_DB: unknown; AI?: unknown; VECTORIZE?: unknown },
+  env: { INTEL_DB: unknown; AI?: unknown; VECTORIZE?: unknown; RATE_LIMIT_HMAC_KEY?: string },
   body: unknown,
   overrides?: Partial<Record<string, string>>,
   rawBody?: string,
@@ -204,6 +76,7 @@ function callIngest(
     env: {
       AI: makeFakeAi(),
       VECTORIZE: makeFakeVectorize().vectorize,
+      RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET,
       ...env,
     },
     params: { sessionId },
@@ -217,9 +90,9 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
 
   it("ingestão válida: chunka, persiste, marca a sessão ready, e não ecoa o texto na resposta", async () => {
     const { db, sessions, insertedChunks } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
 
-    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload());
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader(capability));
     expect(response.status).toBe(200);
 
     const body = (await response.json()) as Record<string, unknown>;
@@ -233,56 +106,87 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
     expect(insertedChunks.length).toBeGreaterThan(0);
   });
 
-  it("sessão inexistente retorna 404", async () => {
+  it("sessão inexistente: 401 (mesma resposta genérica de autorização — nunca revela que a sessão não existe)", async () => {
     const { db } = makeFakeIntelligenceDb();
     const response = await callIngest("00000000-0000-4000-8000-000000000000", { INTEL_DB: db as never }, validPayload());
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(401);
+  });
+
+  it("4. ingest sem capability (header Authorization ausente): bloqueado (401)", async () => {
+    const { db, sessions } = makeFakeIntelligenceDb();
+    const { sessionId } = await seedAuthorizedSession(sessions);
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload());
+    expect(response.status).toBe(401);
+    expect(sessions.get(sessionId)!.status).toBe("created");
+  });
+
+  it("7. capability incorreta: bloqueado (401), sessão permanece intocada", async () => {
+    const { db, sessions } = makeFakeIntelligenceDb();
+    const { sessionId } = await seedAuthorizedSession(sessions);
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader("capability-errada-qualquer-coisa"));
+    expect(response.status).toBe(401);
+    expect(sessions.get(sessionId)!.status).toBe("created");
+  });
+
+  it("9. sessão legada sem capability_hash (null): sempre bloqueada, sem fallback para sessionId sozinho", async () => {
+    const { db, sessions } = makeFakeIntelligenceDb();
+    const sessionId = seedSession(sessions); // capability_hash: null por padrão
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader("qualquer-valor"));
+    expect(response.status).toBe(401);
+    expect(sessions.get(sessionId)!.status).toBe("created");
   });
 
   it("sessão expirada não permite ingestão (falha determinística)", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions, { expires_at: new Date(Date.now() - 1000).toISOString() });
-    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload());
+    const { sessionId, capability } = await seedAuthorizedSession(sessions, {
+      expires_at: new Date(Date.now() - 1000).toISOString(),
+    });
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader(capability));
     expect(response.status).toBe(410);
     expect(sessions.get(sessionId)!.status).toBe("created");
   });
 
   it("payload inválido: rejeita e libera a sessão para retry (não fica presa em ingesting)", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
-    const response = await callIngest(sessionId, { INTEL_DB: db as never }, { contractVersion: INGESTION_CONTRACT_VERSION, pageCount: 5, pages: [] });
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
+    const response = await callIngest(
+      sessionId,
+      { INTEL_DB: db as never },
+      { contractVersion: INGESTION_CONTRACT_VERSION, pageCount: 5, pages: [] },
+      authHeader(capability),
+    );
     expect(response.status).toBe(400);
     expect(sessions.get(sessionId)!.status).toBe("created");
   });
 
   it("JSON malformado retorna 400 sem lançar e libera a sessão", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
-    const response = await callIngest(sessionId, { INTEL_DB: db as never }, null, {}, "{ isso não é json");
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, null, authHeader(capability), "{ isso não é json");
     expect(response.status).toBe(400);
     expect(sessions.get(sessionId)!.status).toBe("created");
   });
 
   it("segunda ingestão na mesma sessão (já ready) é rejeitada com 409, sem reprocessar", async () => {
     const { db, sessions, insertedChunks } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
 
-    const first = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload());
+    const first = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader(capability));
     expect(first.status).toBe(200);
     const chunksAfterFirst = insertedChunks.length;
 
-    const second = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload());
+    const second = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader(capability));
     expect(second.status).toBe(409);
     expect(insertedChunks.length).toBe(chunksAfterFirst);
   });
 
   it("duas ingestões concorrentes na mesma sessão: só uma consegue avançar (estado guardado atomicamente)", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
 
     const [first, second] = await Promise.all([
-      callIngest(sessionId, { INTEL_DB: db as never }, validPayload()),
-      callIngest(sessionId, { INTEL_DB: db as never }, validPayload()),
+      callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader(capability)),
+      callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader(capability)),
     ]);
 
     const statuses = [first.status, second.status].sort();
@@ -291,7 +195,7 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
 
   it("falha durante o chunking/persistência marca a sessão failed, nunca ready", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
 
     const originalPrepare = db.prepare.bind(db);
     const failingDb = {
@@ -309,51 +213,76 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
       }),
     };
 
-    const response = await callIngest(sessionId, { INTEL_DB: failingDb as never }, validPayload());
+    const response = await callIngest(sessionId, { INTEL_DB: failingDb as never }, validPayload(), authHeader(capability));
     expect(response.status).toBe(500);
     expect(sessions.get(sessionId)!.status).toBe("failed");
   });
 
   it("rejeita Origin estranho antes de tocar a sessão", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
-    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), { Origin: "https://attacker.example.com" });
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), {
+      Origin: "https://attacker.example.com",
+      ...authHeader(capability),
+    });
     expect(response.status).toBe(403);
     expect(sessions.get(sessionId)!.status).toBe("created");
   });
 
   it("rejeita Content-Type diferente de application/json", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
-    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), { "Content-Type": "text/plain" });
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), {
+      "Content-Type": "text/plain",
+      ...authHeader(capability),
+    });
     expect(response.status).toBe(415);
   });
 
   it("rejeita corpo maior que o limite máximo", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
     const rawBody = JSON.stringify(validPayload()) + " ".repeat(5_000_000);
-    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), {}, rawBody);
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader(capability), rawBody);
     expect(response.status).toBe(413);
   });
 
-  it("aplica rate limit defensivo por IP", async () => {
+  it("aplica rate limit defensivo em memória por IP", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
     let lastStatus = 0;
     for (let i = 0; i < 25; i += 1) {
       const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), {
         "CF-Connecting-IP": "203.0.113.77",
+        ...authHeader(capability),
       });
       lastStatus = response.status;
     }
     expect(lastStatus).toBe(429);
   });
 
+  it("18. falha do D1 no rate limit distribuído: ingest fail-closed (503), nunca chama Workers AI/Vectorize", async () => {
+    const { db, sessions } = makeFakeIntelligenceDb();
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
+    const ai = makeFakeAi();
+    const { vectorize, upserted } = makeFakeVectorize();
+
+    const response = await callIngest(
+      sessionId,
+      { INTEL_DB: db as never, AI: ai, VECTORIZE: vectorize, RATE_LIMIT_HMAC_KEY: undefined },
+      validPayload(),
+      authHeader(capability),
+    );
+    expect(response.status).toBe(503);
+    expect(sessions.get(sessionId)!.status).toBe("created");
+    expect((ai.run as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    expect(upserted).toHaveLength(0);
+  });
+
   it("chunks atravessando páginas preservam proveniência real — resultado depende só do texto enviado, nunca do backend", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
-    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload());
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader(capability));
     const body = (await response.json()) as { pageCount: number; chunkCount: number };
     expect(body.pageCount).toBe(2);
     expect(body.chunkCount).toBeGreaterThan(0);
@@ -361,11 +290,16 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
 
   it("quantidade de embeddings gerados é igual à quantidade de chunks, e cada vetor upsertado tem ID/metadata determinísticos", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
     const ai = makeFakeAi();
     const { vectorize, upserted } = makeFakeVectorize();
 
-    const response = await callIngest(sessionId, { INTEL_DB: db as never, AI: ai, VECTORIZE: vectorize }, validPayload());
+    const response = await callIngest(
+      sessionId,
+      { INTEL_DB: db as never, AI: ai, VECTORIZE: vectorize },
+      validPayload(),
+      authHeader(capability),
+    );
     const body = (await response.json()) as { chunkCount: number; vectorCount: number };
 
     expect(response.status).toBe(200);
@@ -391,7 +325,7 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
 
   it("batching: chunks são enviados ao modelo em lotes, não um-a-um", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
     const ai = makeFakeAi();
 
     // Documento maior, força múltiplos chunks (bem acima de EMBEDDING_BATCH_SIZE=20 blocos).
@@ -401,7 +335,7 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
     }));
     const payload = { contractVersion: INGESTION_CONTRACT_VERSION, pageCount: 40, pages };
 
-    const response = await callIngest(sessionId, { INTEL_DB: db as never, AI: ai }, payload);
+    const response = await callIngest(sessionId, { INTEL_DB: db as never, AI: ai }, payload, authHeader(capability));
     expect(response.status).toBe(200);
     // Menos chamadas a env.AI.run() do que chunks — prova que há batching real.
     const runCalls = (ai.run as unknown as ReturnType<typeof vi.fn>).mock.calls.length;
@@ -412,11 +346,16 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
 
   it("falha do Workers AI (embedding) marca a sessão failed, nunca ready, e não chama o Vectorize", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
     const failingAi = { run: vi.fn().mockRejectedValue(new Error("Workers AI indisponível")) } as unknown as Ai;
     const { vectorize, upserted } = makeFakeVectorize();
 
-    const response = await callIngest(sessionId, { INTEL_DB: db as never, AI: failingAi, VECTORIZE: vectorize }, validPayload());
+    const response = await callIngest(
+      sessionId,
+      { INTEL_DB: db as never, AI: failingAi, VECTORIZE: vectorize },
+      validPayload(),
+      authHeader(capability),
+    );
     expect(response.status).toBe(500);
     expect(sessions.get(sessionId)!.status).toBe("failed");
     expect(upserted).toHaveLength(0);
@@ -424,17 +363,22 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
 
   it("falha do Vectorize (upsert) marca a sessão failed, nunca ready", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
     const failingVectorize = { upsert: vi.fn().mockRejectedValue(new Error("Vectorize indisponível")) } as unknown as Vectorize;
 
-    const response = await callIngest(sessionId, { INTEL_DB: db as never, VECTORIZE: failingVectorize }, validPayload());
+    const response = await callIngest(
+      sessionId,
+      { INTEL_DB: db as never, VECTORIZE: failingVectorize },
+      validPayload(),
+      authHeader(capability),
+    );
     expect(response.status).toBe(500);
     expect(sessions.get(sessionId)!.status).toBe("failed");
   });
 
   it("sessão nunca fica ready se a transição para indexing falhar (estado inconsistente evitado)", async () => {
     const { sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
     // DB cujo "SET status = 'indexing'" nunca aplica (simula uma corrida/estado já alterado).
     const stubbornDb = {
       prepare: vi.fn((query: string) => ({
@@ -444,6 +388,7 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
             if (query.includes("SET status = 'ingesting'")) return { meta: { changes: 1 } };
             if (query.includes("SET status = 'indexing'")) return { meta: { changes: 0 } };
             if (query.includes("INSERT INTO intelligence_chunks")) return { meta: { changes: 1 } };
+            if (query.includes("INSERT INTO intelligence_rate_limit_windows")) return { meta: { changes: 1 } };
             if (query.includes("SET status = 'failed'")) {
               const [id] = values as [string];
               const row = sessions.get(id);
@@ -462,30 +407,42 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
         }),
       })),
     };
-    const response = await callIngest(sessionId, { INTEL_DB: stubbornDb as never }, validPayload());
+    const response = await callIngest(sessionId, { INTEL_DB: stubbornDb as never }, validPayload(), authHeader(capability));
     expect(response.status).toBe(500);
     expect(sessions.get(sessionId)!.status).toBe("failed");
   });
 
-  it("nenhum log de telemetria contém texto de chunk ou conteúdo do documento", async () => {
+  it("11. nenhum log de telemetria contém texto de chunk, conteúdo do documento, ou a capability", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    await callIngest(sessionId, { INTEL_DB: db as never }, validPayload());
+    await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader(capability));
 
     for (const call of consoleSpy.mock.calls) {
-      expect(JSON.stringify(call)).not.toContain("Conteúdo real da página");
+      const serialized = JSON.stringify(call);
+      expect(serialized).not.toContain("Conteúdo real da página");
+      expect(serialized).not.toContain(capability);
     }
     consoleSpy.mockRestore();
   });
 
+  it("10. capability nunca aparece em nenhuma resposta de erro (corpo vazio)", async () => {
+    const { db, sessions } = makeFakeIntelligenceDb();
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
+    const response = await callIngest(sessionId, { INTEL_DB: db as never }, validPayload(), authHeader("capability-errada"));
+    expect(response.status).toBe(401);
+    const text = await response.text();
+    expect(text).toBe("");
+    expect(text).not.toContain(capability);
+  });
+
   it("nenhuma chamada é feita a OpenAI/Luna — só ao binding Workers AI local (fake)", async () => {
     const { db, sessions } = makeFakeIntelligenceDb();
-    const sessionId = seedSession(sessions);
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
     const ai = makeFakeAi();
 
-    await callIngest(sessionId, { INTEL_DB: db as never, AI: ai }, validPayload());
+    await callIngest(sessionId, { INTEL_DB: db as never, AI: ai }, validPayload(), authHeader(capability));
 
     for (const call of (ai.run as unknown as ReturnType<typeof vi.fn>).mock.calls) {
       expect(call[0]).toBe("@cf/baai/bge-m3");
