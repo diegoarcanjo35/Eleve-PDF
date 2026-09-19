@@ -23,24 +23,24 @@ database_name = "elevepdf-analytics-preview"
 database_id = "38e7597b-692b-4545-9930-0a0a9fdaef6e"
 migrations_dir = "migrations"
 
-# --- Inteligência Documental (Fase 01, Sprint 01B) ---
+# --- Inteligência Documental (Fase 01, Sprint 01B / 01B.1) ---
 # D1 dedicado, isolado do D1 de Analytics acima — sessões/chunks de IA nunca
-# compartilham tabela ou binding com `analytics_events`.
-# IMPORTANTE: este binding ainda NÃO foi provisionado remotamente nesta
-# sprint (nem produção nem preview) — `database_id` abaixo é um placeholder
-# explícito. `wrangler pages dev --local` funciona normalmente (D1 local
-# emulado por Miniflare), mas qualquer deploy real falhará até a criação
-# remota ser autorizada e o `database_id` real ser preenchido aqui.
+# compartilham tabela ou binding com `analytics_events`. Provisionado
+# exclusivamente na conta diego.upis@gmail.com (Account ID
+# fd553a9aacdf161483f2e376a16a9a4d — ver Fase 01 Etapa 03B), a mesma conta
+# nova usada para a demais infra de Inteligência Documental. Migration
+# `migrations-intelligence/0001_intelligence_foundation.sql` já aplicada em
+# ambos (produção e preview) — ver relatório Sprint 01B.1.
 [[d1_databases]]
 binding = "INTEL_DB"
 database_name = "elevepdf-intelligence"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "c201632f-d197-4623-8bb5-d05ff1985b8f"
 migrations_dir = "migrations-intelligence"
 
 [[env.preview.d1_databases]]
 binding = "INTEL_DB"
 database_name = "elevepdf-intelligence-preview"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "4611d5d6-9e05-4eb8-a4c5-195320f42aa8"
 migrations_dir = "migrations-intelligence"
 
 # Variáveis usadas pelos endpoints de Analytics — ver functions/api/analytics/.
