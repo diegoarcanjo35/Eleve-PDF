@@ -21,6 +21,19 @@ interface DocumentViewerPaneProps {
  * navegadores modernos (Chrome, Edge, Firefox, Safari) tem visualizador de
  * PDF nativo com suporte a esse fragmento; onde não houver, o link "Abrir em
  * nova aba" garante que o documento continua acessível.
+ *
+ * CORREÇÃO (Sprint 01F.2): validação real em Chromium (Sprint 01F.1) provou
+ * que o plugin de PDF nativo só honra o fragmento `#page=N` no carregamento
+ * inicial do `<iframe>` — uma troca de `src` post-mount apontando para o
+ * MESMO blob, só com fragmento diferente, nunca move visualmente o conteúdo
+ * exibido (o atributo `src` do DOM muda corretamente, mas o plugin ignora).
+ * Por isso a `key` do `<iframe>` inclui `currentPage`: cada navegação força
+ * o React a desmontar e remontar o elemento, que o navegador sempre trata
+ * como um carregamento inicial de verdade — o único caminho comprovado a
+ * funcionar. A Blob URL em si (`blobUrl`, via `useMemo`) NUNCA é recriada
+ * por causa disso — só o `<iframe>` é remontado; o blob e sua revogação
+ * continuam amarrados exclusivamente à troca de `fileBytes` (novo
+ * documento), nunca à troca de página.
  */
 export function DocumentViewerPane({
   fileBytes,
@@ -79,7 +92,7 @@ export function DocumentViewerPane({
         </a>
       </div>
       <iframe
-        key={blobUrl}
+        key={`${blobUrl}-${currentPage}`}
         className="intel-viewer__frame"
         src={`${blobUrl}#page=${currentPage}`}
         title={`Visualização de ${fileName}`}

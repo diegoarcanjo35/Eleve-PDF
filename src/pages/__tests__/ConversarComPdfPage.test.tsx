@@ -203,11 +203,12 @@ describe("ConversarComPdfPage", () => {
     await userEvent.click(screen.getByRole("button", { name: /enviar pergunta/i }));
     await waitFor(() => expect(screen.getByText("Página 2")).toBeInTheDocument());
 
-    const iframe = screen.getByTitle(/visualização de documento\.pdf/i) as HTMLIFrameElement;
-    expect(iframe.src).toContain("#page=1");
+    expect((screen.getByTitle(/visualização de documento\.pdf/i) as HTMLIFrameElement).src).toContain("#page=1");
 
     await userEvent.click(screen.getByText("Página 2"));
-    expect(iframe.src).toContain("#page=2");
+    // Sprint 01F.2: o iframe é remontado (novo nó DOM) a cada troca de
+    // página — busca de novo em vez de reaproveitar a referência antiga.
+    expect((screen.getByTitle(/visualização de documento\.pdf/i) as HTMLIFrameElement).src).toContain("#page=2");
   });
 
   it("13. a capability nunca aparece em nenhuma URL chamada durante todo o fluxo", async () => {
