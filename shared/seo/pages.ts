@@ -73,6 +73,15 @@ export const SEO_PAGES: SeoPageMeta[] = [
     canonical: true,
   },
   {
+    path: "/conversar-com-pdf",
+    title: "Converse com seu PDF com IA — Eleve IA | ElevePDF",
+    description:
+      "Envie um PDF e faça perguntas sobre o conteúdo dele com a Eleve IA. Respostas fundamentadas, com as páginas de origem indicadas.",
+    robots: "index, follow",
+    social: true,
+    canonical: true,
+  },
+  {
     path: "/privacidade",
     title: "Privacidade e métricas — ElevePDF",
     description:

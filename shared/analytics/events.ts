@@ -20,6 +20,15 @@ export const ALLOWED_EVENTS = [
   "structural_warning_confirmed",
   "no_gain_original_returned",
   "oversized_parts_result",
+  // --- Converse com PDF / Eleve IA (Fase 01, Sprint 01F) — só eventos
+  // estruturais; nunca nome de arquivo, texto, pergunta, resposta, páginas,
+  // capability ou sessionId (ver functions/api/intelligence/**, que nunca
+  // recebe estes eventos, e src/pages/ConversarComPdfPage.tsx).
+  "intel_upload_started",
+  "intel_document_ready",
+  "intel_document_unsupported",
+  "intel_question_sent",
+  "intel_answer_received",
 ] as const;
 
 export type AnalyticsEventType = (typeof ALLOWED_EVENTS)[number];
@@ -30,7 +39,12 @@ export function isAllowedEvent(value: unknown): value is AnalyticsEventType {
 
 /** Identificadores de ferramenta — cresce junto com `toolsRegistry.ts`, mas é uma
  * lista própria e fechada (o backend não deve depender do registro de UI). */
-export const ALLOWED_TOOL_IDS = ["compactar-pdf", "dividir-pdf-por-tamanho", "juntar-pdfs"] as const;
+export const ALLOWED_TOOL_IDS = [
+  "compactar-pdf",
+  "dividir-pdf-por-tamanho",
+  "juntar-pdfs",
+  "conversar-com-pdf",
+] as const;
 export type ToolId = (typeof ALLOWED_TOOL_IDS)[number];
 
 export const ALLOWED_ROUTE_IDS = [
@@ -38,6 +52,7 @@ export const ALLOWED_ROUTE_IDS = [
   "compactar-pdf",
   "dividir-pdf-por-tamanho",
   "juntar-pdfs",
+  "conversar-com-pdf",
   "privacidade",
   "termos-de-uso",
 ] as const;
@@ -51,6 +66,8 @@ export const ALLOWED_CTA_IDS = [
   "card_juntar",
   "cross_link_compactar",
   "cross_link_dividir",
+  "hero_conversar",
+  "card_conversar",
 ] as const;
 export type CtaId = (typeof ALLOWED_CTA_IDS)[number];
 

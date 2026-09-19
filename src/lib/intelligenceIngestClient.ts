@@ -1,6 +1,7 @@
 import type { ExtractedDocument } from "./pdfExtractText";
 import { INGESTION_CONTRACT_VERSION } from "@shared/intelligence/constants";
 import type { IngestionPayloadV1 } from "@shared/intelligence/types";
+import { authorizationHeader } from "./intelligenceAuth";
 
 const SESSIONS_ENDPOINT = "/api/intelligence/sessions";
 
@@ -13,16 +14,6 @@ export interface CreateSessionResult {
   sessionCapability: string;
   status: string;
   expiresAt: string;
-}
-
-/** Header `Authorization: Bearer <capability>` — única forma de transporte
- * aceita pelo backend (nunca query string/URL/path/cookie, ver
- * `functions/_shared/sessionCapability.ts`). Centralizado aqui para que
- * qualquer chamada futura a um endpoint protegido (retrieve/ask) monte o
- * header de forma idêntica, sem repetir a string `"Bearer "` em cada
- * chamador. */
-function authorizationHeader(sessionCapability: string): Record<string, string> {
-  return { Authorization: `Bearer ${sessionCapability}` };
 }
 
 export interface IngestResult {
@@ -75,17 +66,22 @@ async function ingestPayload(sessionId: string, sessionCapability: string, paylo
  * não contém bytes do arquivo.
  *
  * AUTORIZAÇÃO (Sprint 01E.1A): a `sessionCapability` devolvida por
- * `createIntelligenceSession` nunca é persistida — vive só como valor local
- * dentro desta chamada, até ser usada no header `Authorization` do ingest
- * logo em seguida. Se o backend responder sem capability (contrato
- * divergente), a ingestão é recusada aqui mesmo, localmente — nunca
- * prossegue usando só o `sessionId` como se isso autorizasse a operação.
+ * `createIntelligenceSession` nunca é persistida por esta função — só
+ * repassada de volta ao chamador (Sprint 01F: `useIntelligenceSession`,
+ * que a mantém em memória para as chamadas de retrieve/ask subsequentes,
+ * nunca em localStorage/sessionStorage/URL). Se o backend responder sem
+ * capability (contrato divergente), a ingestão é recusada aqui mesmo,
+ * localmente — nunca prossegue usando só o `sessionId` como se isso
+ * autorizasse a operação.
  */
-export async function ingestExtractedDocument(document: ExtractedDocument): Promise<IngestResult> {
+export async function ingestExtractedDocument(
+  document: ExtractedDocument,
+): Promise<IngestResult & { sessionCapability: string }> {
   const session = await createIntelligenceSession();
   if (!session.sessionCapability) {
     throw new Error("Sessão criada sem capability de autorização — ingestão recusada por segurança.");
   }
   const payload = toIngestionPayload(document);
-  return ingestPayload(session.sessionId, session.sessionCapability, payload);
+  const result = await ingestPayload(session.sessionId, session.sessionCapability, payload);
+  return { ...result, sessionCapability: session.sessionCapability };
 }
