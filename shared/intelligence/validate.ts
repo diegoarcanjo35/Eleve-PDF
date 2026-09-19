@@ -4,8 +4,10 @@ import {
   MAX_BLOCK_CHARS,
   MAX_CHARS_TOTAL,
   MAX_PAGES_PER_DOCUMENT,
+  MAX_QUERY_CHARS,
+  RETRIEVAL_CONTRACT_VERSION,
 } from "./constants";
-import type { IngestionBlockV1, IngestionPageV1, IngestionPayloadV1 } from "./types";
+import type { IngestionBlockV1, IngestionPageV1, IngestionPayloadV1, RetrievalQueryV1 } from "./types";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -81,4 +83,24 @@ export function validateIngestionPayload(raw: unknown): IngestionPayloadV1 | nul
   // páginas — por princípio da casa dos pombos, esses três fatos juntos já
   // garantem que o conjunto é exatamente {1, ..., pageCount}, sem lacunas.
   return { contractVersion: INGESTION_CONTRACT_VERSION, pageCount, pages: validatedPages };
+}
+
+/**
+ * Valida (nunca confia em) a query bruta de retrieval vinda do cliente. Só
+ * aceita `contractVersion` e `query` (string não vazia, dentro do limite de
+ * tamanho) — nenhum outro campo do payload é lido nem propagado. Controles
+ * como topK, namespace, filtro de sessão e modelo nunca vêm do cliente (são
+ * sempre do servidor — ver `functions/api/intelligence/.../retrieve.ts`).
+ */
+export function validateRetrievalQuery(raw: unknown): RetrievalQueryV1 | null {
+  if (!isPlainObject(raw)) return null;
+
+  const { contractVersion, query } = raw;
+  if (contractVersion !== RETRIEVAL_CONTRACT_VERSION) return null;
+  if (typeof query !== "string") return null;
+
+  const trimmed = query.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_QUERY_CHARS) return null;
+
+  return { contractVersion: RETRIEVAL_CONTRACT_VERSION, query: trimmed };
 }

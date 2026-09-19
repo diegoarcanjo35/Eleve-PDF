@@ -20,6 +20,19 @@ export interface SessionRow {
   page_count: number | null;
   chunk_count: number | null;
   strategy_version: string | null;
+  vector_count: number | null;
+  embedding_strategy_version: string | null;
+}
+
+export interface ChunkRow {
+  id: string;
+  session_id: string;
+  chunk_index: number;
+  text: string;
+  start_page: number;
+  end_page: number;
+  pages_json: string;
+  strategy_version: string;
 }
 
 export async function createSession(
@@ -35,7 +48,8 @@ export async function createSession(
 export async function getSession(db: IntelligenceD1, id: string): Promise<SessionRow | null> {
   const row = await db
     .prepare(
-      `SELECT id, status, created_at, expires_at, page_count, chunk_count, strategy_version
+      `SELECT id, status, created_at, expires_at, page_count, chunk_count, strategy_version,
+              vector_count, embedding_strategy_version
        FROM intelligence_sessions WHERE id = ?`,
     )
     .bind(id)
@@ -69,29 +83,83 @@ export async function releaseSessionClaim(db: IntelligenceD1, id: string): Promi
     .run();
 }
 
+/** Transição `ingesting` -> `indexing`, guardada da mesma forma que
+ * `claimSessionForIngest` — marca que o chunking terminou e a indexação
+ * semântica (embeddings + Vectorize) começou. Uma sessão nunca pula direto
+ * de `ingesting` para `ready`. */
+export async function markSessionIndexing(db: IntelligenceD1, id: string): Promise<boolean> {
+  const result = await db
+    .prepare(`UPDATE intelligence_sessions SET status = 'indexing' WHERE id = ? AND status = 'ingesting'`)
+    .bind(id)
+    .run();
+  return result.meta.changes > 0;
+}
+
+/** Só chega a `ready` depois de chunks *e* vetores existirem — nunca antes.
+ * Guardado por `status = 'indexing'`: se a indexação não tiver sido
+ * corretamente iniciada (`markSessionIndexing`), esta transição não ocorre. */
 export async function markSessionReady(
   db: IntelligenceD1,
   id: string,
-  params: { pageCount: number; chunkCount: number; strategyVersion: string },
+  params: {
+    pageCount: number;
+    chunkCount: number;
+    strategyVersion: string;
+    vectorCount: number;
+    embeddingStrategyVersion: string;
+  },
 ): Promise<void> {
   await db
     .prepare(
       `UPDATE intelligence_sessions
-       SET status = 'ready', page_count = ?, chunk_count = ?, strategy_version = ?
-       WHERE id = ? AND status = 'ingesting'`,
+       SET status = 'ready', page_count = ?, chunk_count = ?, strategy_version = ?,
+           vector_count = ?, embedding_strategy_version = ?
+       WHERE id = ? AND status = 'indexing'`,
     )
-    .bind(params.pageCount, params.chunkCount, params.strategyVersion, id)
+    .bind(
+      params.pageCount,
+      params.chunkCount,
+      params.strategyVersion,
+      params.vectorCount,
+      params.embeddingStrategyVersion,
+      id,
+    )
     .run();
 }
 
-/** Estado terminal — usado quando o chunking ou a persistência dos chunks
- * falha depois do payload já ter sido validado, para nunca deixar a sessão
- * falsamente presa em `ingesting` nem marcada `ready` sem chunks reais. */
+/** Estado terminal — usado quando o chunking, os embeddings, ou o upsert no
+ * Vectorize falham depois do payload já ter sido validado, para nunca
+ * deixar a sessão falsamente presa em `ingesting`/`indexing` nem marcada
+ * `ready` sem chunks e vetores reais. Aceita falha em qualquer um dos dois
+ * estados intermediários. */
 export async function markSessionFailed(db: IntelligenceD1, id: string): Promise<void> {
   await db
-    .prepare(`UPDATE intelligence_sessions SET status = 'failed' WHERE id = ? AND status = 'ingesting'`)
+    .prepare(`UPDATE intelligence_sessions SET status = 'failed' WHERE id = ? AND status IN ('ingesting', 'indexing')`)
     .bind(id)
     .run();
+}
+
+/**
+ * Busca chunks por ID (chave primária de `intelligence_chunks`) — usado
+ * pelo retrieval para recuperar texto/proveniência a partir dos IDs de
+ * vetor retornados pelo Vectorize. O D1 permanece a fonte de verdade do
+ * texto/proveniência estruturada; o Vectorize só serve como índice.
+ * IDs sem linha correspondente são silenciosamente omitidos do resultado
+ * (nunca deveria acontecer para uma sessão `ready`, mas não é fatal).
+ */
+export async function getChunksByIds(db: IntelligenceD1, ids: string[]): Promise<ChunkRow[]> {
+  const rows: ChunkRow[] = [];
+  for (const id of ids) {
+    const row = await db
+      .prepare(
+        `SELECT id, session_id, chunk_index, text, start_page, end_page, pages_json, strategy_version
+         FROM intelligence_chunks WHERE id = ?`,
+      )
+      .bind(id)
+      .first<ChunkRow>();
+    if (row) rows.push(row);
+  }
+  return rows;
 }
 
 export async function insertChunks(db: IntelligenceD1, sessionId: string, chunks: DocumentChunk[]): Promise<void> {

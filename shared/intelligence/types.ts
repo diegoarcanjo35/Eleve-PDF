@@ -1,7 +1,10 @@
-import type { INGESTION_CONTRACT_VERSION } from "./constants";
+import type { INGESTION_CONTRACT_VERSION, RETRIEVAL_CONTRACT_VERSION } from "./constants";
 
-/** Estado da sessão temporária, controlado exclusivamente pelo backend. */
-export type SessionStatus = "created" | "ingesting" | "ready" | "failed";
+/** Estado da sessão temporária, controlado exclusivamente pelo backend.
+ * `indexing` (Sprint 01C) fica entre `ingesting` e `ready` — uma sessão só
+ * chega a `ready` depois de chunks *e* vetores (embeddings no Vectorize)
+ * existirem; nunca antes. */
+export type SessionStatus = "created" | "ingesting" | "indexing" | "ready" | "failed";
 
 /** Bloco de texto (linha/parágrafo) de uma página, já normalizado pela
  * extração local (Sprint 01A). Nunca carrega bounding box — coordenadas
@@ -34,4 +37,23 @@ export interface DocumentChunk {
   /** Páginas (ordenadas, únicas) que contribuíram texto para este chunk. */
   pages: number[];
   chunkingStrategyVersion: string;
+}
+
+/** Payload versionado enviado por `POST /api/intelligence/sessions/:id/retrieve`.
+ * Nunca carrega namespace, filtro de sessão, topK, modelo ou índice — esses
+ * controles são exclusivamente do servidor (ver `04-... retrieve.ts`). */
+export interface RetrievalQueryV1 {
+  contractVersion: typeof RETRIEVAL_CONTRACT_VERSION;
+  query: string;
+}
+
+/** Um chunk recuperado, pronto para validação técnica — nunca inclui o
+ * embedding, metadata interna, ou qualquer dado de outra sessão/documento. */
+export interface RetrievedChunk {
+  chunkId: string;
+  text: string;
+  score: number;
+  pages: number[];
+  startPage: number;
+  endPage: number;
 }

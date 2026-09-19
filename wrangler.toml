@@ -43,6 +43,29 @@ database_name = "elevepdf-intelligence-preview"
 database_id = "4611d5d6-9e05-4eb8-a4c5-195320f42aa8"
 migrations_dir = "migrations-intelligence"
 
+# --- Embeddings + Vectorize (Fase 01, Sprint 01C) ---
+# Workers AI (modelo @cf/baai/bge-m3 exclusivamente — ver constants.ts) e o
+# Vectorize já existente `elevepdf-conversar-pdf-embeddings` (dimensões
+# 1024, métrica cosine — criado na Etapa 03B, mesma conta diego.upis@gmail.com).
+# `ai` e `vectorize` são chaves não-herdáveis em Pages (confirmado na
+# documentação oficial), e como `d1_databases`/`vars` já são sobrescritos em
+# [env.preview], TODAS as chaves não-herdáveis precisam ser repetidas lá —
+# por isso o bloco abaixo é duplicado, apontando para o mesmo índice/conta
+# (não existe um segundo Vectorize de preview; é o mesmo recurso).
+[ai]
+binding = "AI"
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "elevepdf-conversar-pdf-embeddings"
+
+[env.preview.ai]
+binding = "AI"
+
+[[env.preview.vectorize]]
+binding = "VECTORIZE"
+index_name = "elevepdf-conversar-pdf-embeddings"
+
 # Variáveis usadas pelos endpoints de Analytics — ver functions/api/analytics/.
 # CF_ACCESS_TEAM_DOMAIN e CF_ACCESS_AUD ficam ausentes de propósito: enquanto
 # não forem configuradas em produção, GET /api/analytics/summary responde 503
