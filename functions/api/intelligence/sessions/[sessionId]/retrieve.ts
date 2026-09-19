@@ -1,7 +1,9 @@
 import {
   EMBEDDING_MODEL,
   MAX_RETRIEVE_BODY_BYTES,
+  RETRIEVAL_EMPTY_RETRY_DELAY_MS,
   RETRIEVAL_TOP_K,
+  VECTORIZE_PROPAGATION_GRACE_MS,
 } from "../../../../../shared/intelligence/constants";
 import { validateRetrievalQuery } from "../../../../../shared/intelligence/validate";
 import type { RetrievedChunk } from "../../../../../shared/intelligence/types";
@@ -25,6 +27,44 @@ function genericError(status: number): Response {
   return new Response(null, { status });
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function queryChunks(
+  env: Env,
+  sessionId: string,
+  queryVector: number[],
+): Promise<RetrievedChunk[]> {
+  // Filtro de sessão aplicado NA própria query do Vectorize — nunca um
+  // retrieval global seguido de filtragem local.
+  const matches = await env.VECTORIZE.query(queryVector, {
+    topK: RETRIEVAL_TOP_K,
+    returnValues: false,
+    returnMetadata: "none",
+    filter: { sessionId: { $eq: sessionId } },
+  });
+
+  const chunkIds = matches.matches.map((m) => m.id);
+  const chunkRows = await getChunksByIds(env.INTEL_DB, chunkIds);
+  const chunksById = new Map(chunkRows.map((row) => [row.id, row]));
+
+  const results: RetrievedChunk[] = [];
+  for (const match of matches.matches) {
+    const chunk = chunksById.get(match.id);
+    if (!chunk) continue; // defensivo: nunca deveria faltar para uma sessão `ready`.
+    results.push({
+      chunkId: chunk.id,
+      text: chunk.text,
+      score: match.score,
+      pages: JSON.parse(chunk.pages_json) as number[],
+      startPage: chunk.start_page,
+      endPage: chunk.end_page,
+    });
+  }
+  return results;
+}
+
 /**
  * POST /api/intelligence/sessions/:sessionId/retrieve — busca semântica
  * restrita à sessão autorizada. Sem LLM, sem geração de resposta: só prova
@@ -35,6 +75,18 @@ function genericError(status: number): Response {
  * consulta ao Vectorize — nunca "busca global, filtra depois". O filtro
  * `sessionId` é passado na própria chamada `query()` do Vectorize, então
  * nenhum vetor de outra sessão jamais entra no conjunto de resultados.
+ *
+ * CONSISTÊNCIA EVENTUAL (Sprint 01C.1): `upsert()` do Vectorize é assíncrono
+ * — `ready` significa "upsert aceito", nunca "vetores garantidamente
+ * consultáveis" (medido empiricamente: ainda invisível ~8s depois, visível
+ * ~23s depois, numa única amostra real — não um SLA documentado). Por isso,
+ * quando a primeira consulta não retorna nenhum resultado, este endpoint
+ * faz UMA única reconsulta curta (nunca um loop de polling) antes de
+ * responder. Se ainda vazio E a sessão ficou `ready` há menos de
+ * `VECTORIZE_PROPAGATION_GRACE_MS`, o resultado vem marcado
+ * `indexStatus: "possibly_propagating"` — nunca falsa certeza de "documento
+ * sem conteúdo relevante". Fora dessa janela, vazio é tratado como
+ * resultado genuíno (`indexStatus: "settled"`).
  */
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
@@ -106,31 +158,21 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       throw new Error("Falha ao gerar embedding da pergunta.");
     }
 
-    // Filtro de sessão aplicado NA própria query do Vectorize — nunca um
-    // retrieval global seguido de filtragem local.
-    const matches = await env.VECTORIZE.query(vectors[0]!, {
-      topK: RETRIEVAL_TOP_K,
-      returnValues: false,
-      returnMetadata: "none",
-      filter: { sessionId: { $eq: sessionId } },
-    });
+    let results = await queryChunks(env, sessionId, vectors[0]!);
 
-    const chunkIds = matches.matches.map((m) => m.id);
-    const chunkRows = await getChunksByIds(env.INTEL_DB, chunkIds);
-    const chunksById = new Map(chunkRows.map((row) => [row.id, row]));
+    // Consistência eventual: Vectorize pode ainda não ter propagado o
+    // upsert. Uma única reconsulta curta (nunca polling) quando o primeiro
+    // resultado vem vazio — ver docstring acima.
+    let indexStatus: "settled" | "possibly_propagating" = "settled";
+    if (results.length === 0) {
+      await sleep(RETRIEVAL_EMPTY_RETRY_DELAY_MS);
+      results = await queryChunks(env, sessionId, vectors[0]!);
 
-    const results: RetrievedChunk[] = [];
-    for (const match of matches.matches) {
-      const chunk = chunksById.get(match.id);
-      if (!chunk) continue; // defensivo: nunca deveria faltar para uma sessão `ready`.
-      results.push({
-        chunkId: chunk.id,
-        text: chunk.text,
-        score: match.score,
-        pages: JSON.parse(chunk.pages_json) as number[],
-        startPage: chunk.start_page,
-        endPage: chunk.end_page,
-      });
+      if (results.length === 0) {
+        const readyAtMs = session.ready_at ? new Date(session.ready_at).getTime() : null;
+        const withinGraceWindow = readyAtMs !== null && Date.now() - readyAtMs < VECTORIZE_PROPAGATION_GRACE_MS;
+        if (withinGraceWindow) indexStatus = "possibly_propagating";
+      }
     }
 
     logIntelligenceTelemetry({
@@ -142,7 +184,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       success: true,
     });
 
-    return new Response(JSON.stringify({ sessionId, results }), {
+    return new Response(JSON.stringify({ sessionId, results, indexStatus }), {
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });

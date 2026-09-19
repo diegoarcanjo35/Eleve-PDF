@@ -64,3 +64,19 @@ export const EMBEDDING_BATCH_SIZE = 20;
  * sessão e na metadata de cada vetor, para nunca precisar adivinhar depois
  * qual modelo/config gerou um vetor específico. */
 export const EMBEDDING_STRATEGY_VERSION = "v1-bge-m3-1024-cosine";
+
+// --- Consistência eventual do Vectorize (Sprint 01C.1) ---
+/**
+ * `upsert()`/`deleteByIds()` do Vectorize são assíncronos: retornam um
+ * `mutationId` sem garantir que os vetores já estão consultáveis. Medido
+ * empiricamente nesta sprint (validação real, ver relatório Sprint 01C.1):
+ * um upsert ainda não estava visível numa query ~8s depois, e já estava
+ * visível ~23s depois — UMA amostra real, não um SLA documentado pela
+ * Cloudflare. Este valor é uma hipótese operacional conservadora (bem acima
+ * do único ponto de dado observado), não uma garantia.
+ */
+export const VECTORIZE_PROPAGATION_GRACE_MS = 60_000;
+/** Única espera curta e limitada antes de reconsultar o Vectorize quando a
+ * primeira consulta não retorna nenhum resultado — nunca um loop de
+ * polling, nunca uma espera longa/indefinida. */
+export const RETRIEVAL_EMPTY_RETRY_DELAY_MS = 1500;

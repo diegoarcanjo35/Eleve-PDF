@@ -156,12 +156,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       success: true,
     });
 
+    const readyAtIso = new Date().toISOString();
     await markSessionReady(env.INTEL_DB, sessionId, {
       pageCount: payload.pageCount,
       chunkCount: chunks.length,
       strategyVersion: CHUNKING_STRATEGY_VERSION,
       vectorCount,
       embeddingStrategyVersion: EMBEDDING_STRATEGY_VERSION,
+      readyAtIso,
     });
 
     return new Response(

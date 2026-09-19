@@ -21,6 +21,7 @@ interface FakeSessionRow {
   strategy_version: string | null;
   vector_count: number | null;
   embedding_strategy_version: string | null;
+  ready_at: string | null;
 }
 
 /** Fake do binding Workers AI — devolve embeddings determinísticos com a
@@ -70,6 +71,7 @@ function makeFakeIntelligenceDb() {
                   strategy_version: null,
                   vector_count: null,
                   embedding_strategy_version: null,
+                  ready_at: null,
                 });
                 return { meta: { changes: 1 } };
               }
@@ -101,14 +103,8 @@ function makeFakeIntelligenceDb() {
                 return { meta: { changes: 0 } };
               }
               if (query.includes("SET status = 'ready'")) {
-                const [pageCount, chunkCount, strategyVersion, vectorCount, embeddingStrategyVersion, id] = values as [
-                  number,
-                  number,
-                  string,
-                  number,
-                  string,
-                  string,
-                ];
+                const [pageCount, chunkCount, strategyVersion, vectorCount, embeddingStrategyVersion, readyAtIso, id] =
+                  values as [number, number, string, number, string, string, string];
                 const row = sessions.get(id);
                 if (row && row.status === "indexing") {
                   row.status = "ready";
@@ -117,6 +113,7 @@ function makeFakeIntelligenceDb() {
                   row.strategy_version = strategyVersion;
                   row.vector_count = vectorCount;
                   row.embedding_strategy_version = embeddingStrategyVersion;
+                  row.ready_at = readyAtIso;
                   return { meta: { changes: 1 } };
                 }
                 return { meta: { changes: 0 } };
@@ -164,6 +161,7 @@ function seedSession(sessions: Map<string, FakeSessionRow>, overrides: Partial<F
     strategy_version: null,
     vector_count: null,
     embedding_strategy_version: null,
+    ready_at: null,
     ...overrides,
   });
   return id;

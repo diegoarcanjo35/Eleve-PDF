@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onRequestPost } from "../retrieve";
 import { __resetRateLimitStateForTests } from "../../../../../_shared/rateLimit";
 import { EMBEDDING_DIMENSIONS, MAX_QUERY_CHARS, RETRIEVAL_CONTRACT_VERSION, RETRIEVAL_TOP_K } from "../../../../../../shared/intelligence/constants";
@@ -16,6 +16,7 @@ interface FakeSessionRow {
   strategy_version: string | null;
   vector_count: number | null;
   embedding_strategy_version: string | null;
+  ready_at: string | null;
 }
 
 interface FakeChunkRow {
@@ -87,6 +88,7 @@ function seedSession(sessions: Map<string, FakeSessionRow>, overrides: Partial<F
     strategy_version: "v1",
     vector_count: 1,
     embedding_strategy_version: "v1",
+    ready_at: new Date().toISOString(),
     ...overrides,
   });
   return id;
@@ -352,13 +354,17 @@ describe("POST /api/intelligence/sessions/:sessionId/retrieve", () => {
     const sessions = new Map<string, FakeSessionRow>();
     const chunks = new Map<string, FakeChunkRow>();
     const sessionId = seedSession(sessions);
+    // Um match não-vazio evita o retry de consistência eventual (testado à
+    // parte) — este teste é só sobre o rate limiter, não sobre a espera.
+    seedChunk(chunks, sessionId, 0, "conteúdo qualquer", [1]);
     const db = makeFakeIntelligenceDb(sessions, chunks);
+    const vectorize = makeFakeVectorize([{ id: `${sessionId}:0`, sessionId, score: 0.5 }]);
 
     let lastStatus = 0;
     for (let i = 0; i < 25; i += 1) {
       const response = await onRequestPost({
         request: makeRequest(sessionId, validQuery(), { "CF-Connecting-IP": "198.51.100.20" }),
-        env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: makeFakeVectorize([]) },
+        env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: vectorize },
         params: { sessionId },
       } as never);
       lastStatus = response.status;
@@ -387,5 +393,153 @@ describe("POST /api/intelligence/sessions/:sessionId/retrieve", () => {
       expect(serialized).not.toContain("Brasília");
     }
     consoleSpy.mockRestore();
+  });
+});
+
+describe("consistência eventual do Vectorize (Sprint 01C.1)", () => {
+  beforeEach(() => {
+    __resetRateLimitStateForTests();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("retry único: reconsulta quando o primeiro resultado vem vazio, e encontra no segundo (settled)", async () => {
+    const sessions = new Map<string, FakeSessionRow>();
+    const chunks = new Map<string, FakeChunkRow>();
+    const sessionId = seedSession(sessions);
+    seedChunk(chunks, sessionId, 0, "conteúdo real", [1]);
+    const db = makeFakeIntelligenceDb(sessions, chunks);
+
+    let callCount = 0;
+    const query = vi.fn(async () => {
+      callCount += 1;
+      if (callCount === 1) return { matches: [], count: 0 };
+      return { matches: [{ id: `${sessionId}:0`, score: 0.8 }], count: 1 };
+    });
+    const vectorize = { query } as unknown as Vectorize;
+
+    const promise = onRequestPost({
+      request: makeRequest(sessionId, validQuery()),
+      env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: vectorize },
+      params: { sessionId },
+    } as never);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    const response = await promise;
+    const body = (await response.json()) as { results: unknown[]; indexStatus: string };
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(body.results).toHaveLength(1);
+    expect(body.indexStatus).toBe("settled");
+  });
+
+  it("resultado vazio dentro da janela de propagação vem marcado possibly_propagating — nunca falsa certeza", async () => {
+    const sessions = new Map<string, FakeSessionRow>();
+    const chunks = new Map<string, FakeChunkRow>();
+    const sessionId = seedSession(sessions, { ready_at: new Date().toISOString() });
+    const db = makeFakeIntelligenceDb(sessions, chunks);
+    const vectorize = makeFakeVectorize([]); // sempre vazio, simula propagação em andamento
+
+    const promise = onRequestPost({
+      request: makeRequest(sessionId, validQuery()),
+      env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: vectorize },
+      params: { sessionId },
+    } as never);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    const response = await promise;
+    const body = (await response.json()) as { results: unknown[]; indexStatus: string };
+
+    expect(body.results).toEqual([]);
+    expect(body.indexStatus).toBe("possibly_propagating");
+    expect((vectorize.query as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+  });
+
+  it("resultado vazio fora da janela de propagação é tratado como genuíno (settled)", async () => {
+    const sessions = new Map<string, FakeSessionRow>();
+    const chunks = new Map<string, FakeChunkRow>();
+    const longAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const sessionId = seedSession(sessions, { ready_at: longAgo });
+    const db = makeFakeIntelligenceDb(sessions, chunks);
+    const vectorize = makeFakeVectorize([]);
+
+    const promise = onRequestPost({
+      request: makeRequest(sessionId, validQuery()),
+      env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: vectorize },
+      params: { sessionId },
+    } as never);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    const response = await promise;
+    const body = (await response.json()) as { results: unknown[]; indexStatus: string };
+
+    expect(body.results).toEqual([]);
+    expect(body.indexStatus).toBe("settled");
+  });
+
+  it("primeiro resultado já não-vazio: sem segunda consulta (sem retry desnecessário)", async () => {
+    const sessions = new Map<string, FakeSessionRow>();
+    const chunks = new Map<string, FakeChunkRow>();
+    const sessionId = seedSession(sessions);
+    seedChunk(chunks, sessionId, 0, "conteúdo real", [1]);
+    const db = makeFakeIntelligenceDb(sessions, chunks);
+    const vectorize = makeFakeVectorize([{ id: `${sessionId}:0`, sessionId, score: 0.9 }]);
+
+    const response = await onRequestPost({
+      request: makeRequest(sessionId, validQuery()),
+      env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: vectorize },
+      params: { sessionId },
+    } as never);
+
+    const body = (await response.json()) as { indexStatus: string };
+    expect(body.indexStatus).toBe("settled");
+    expect((vectorize.query as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+  });
+
+  it("falha real durante a consulta nunca retorna sucesso falso (sempre 500, nunca 200 inventado)", async () => {
+    const sessions = new Map<string, FakeSessionRow>();
+    const chunks = new Map<string, FakeChunkRow>();
+    const sessionId = seedSession(sessions);
+    const db = makeFakeIntelligenceDb(sessions, chunks);
+    const vectorize = { query: vi.fn().mockRejectedValue(new Error("Vectorize indisponível")) } as unknown as Vectorize;
+
+    const response = await onRequestPost({
+      request: makeRequest(sessionId, validQuery()),
+      env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: vectorize },
+      params: { sessionId },
+    } as never);
+
+    expect(response.status).toBe(500);
+  });
+
+  it("retry ainda respeita o isolamento de sessão — não passa a incluir vetores de outra sessão", async () => {
+    const sessions = new Map<string, FakeSessionRow>();
+    const chunks = new Map<string, FakeChunkRow>();
+    const sessionId = seedSession(sessions);
+    seedChunk(chunks, sessionId, 0, "conteúdo desta sessão", [1]);
+    const db = makeFakeIntelligenceDb(sessions, chunks);
+
+    let callCount = 0;
+    const query = vi.fn(async (_vector: number[], options: { filter?: Record<string, unknown> }) => {
+      callCount += 1;
+      expect(options.filter).toEqual({ sessionId: { $eq: sessionId } });
+      if (callCount === 1) return { matches: [], count: 0 };
+      return { matches: [{ id: `${sessionId}:0`, score: 0.7 }], count: 1 };
+    });
+    const vectorize = { query } as unknown as Vectorize;
+
+    const promise = onRequestPost({
+      request: makeRequest(sessionId, validQuery()),
+      env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: vectorize },
+      params: { sessionId },
+    } as never);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await promise;
+
+    expect(query).toHaveBeenCalledTimes(2);
   });
 });

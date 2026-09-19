@@ -22,6 +22,11 @@ export interface SessionRow {
   strategy_version: string | null;
   vector_count: number | null;
   embedding_strategy_version: string | null;
+  /** Quando a sessão realmente transicionou para `ready` (ISO 8601 UTC) —
+   * usado pelo retrieval para julgar se um resultado vazio do Vectorize
+   * pode ainda estar em janela de propagação assíncrona. `null` para
+   * sessões que nunca chegaram a `ready`. */
+  ready_at: string | null;
 }
 
 export interface ChunkRow {
@@ -49,7 +54,7 @@ export async function getSession(db: IntelligenceD1, id: string): Promise<Sessio
   const row = await db
     .prepare(
       `SELECT id, status, created_at, expires_at, page_count, chunk_count, strategy_version,
-              vector_count, embedding_strategy_version
+              vector_count, embedding_strategy_version, ready_at
        FROM intelligence_sessions WHERE id = ?`,
     )
     .bind(id)
@@ -107,13 +112,14 @@ export async function markSessionReady(
     strategyVersion: string;
     vectorCount: number;
     embeddingStrategyVersion: string;
+    readyAtIso: string;
   },
 ): Promise<void> {
   await db
     .prepare(
       `UPDATE intelligence_sessions
        SET status = 'ready', page_count = ?, chunk_count = ?, strategy_version = ?,
-           vector_count = ?, embedding_strategy_version = ?
+           vector_count = ?, embedding_strategy_version = ?, ready_at = ?
        WHERE id = ? AND status = 'indexing'`,
     )
     .bind(
@@ -122,6 +128,7 @@ export async function markSessionReady(
       params.strategyVersion,
       params.vectorCount,
       params.embeddingStrategyVersion,
+      params.readyAtIso,
       id,
     )
     .run();
