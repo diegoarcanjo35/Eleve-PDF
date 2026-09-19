@@ -23,6 +23,26 @@ database_name = "elevepdf-analytics-preview"
 database_id = "38e7597b-692b-4545-9930-0a0a9fdaef6e"
 migrations_dir = "migrations"
 
+# --- Inteligência Documental (Fase 01, Sprint 01B) ---
+# D1 dedicado, isolado do D1 de Analytics acima — sessões/chunks de IA nunca
+# compartilham tabela ou binding com `analytics_events`.
+# IMPORTANTE: este binding ainda NÃO foi provisionado remotamente nesta
+# sprint (nem produção nem preview) — `database_id` abaixo é um placeholder
+# explícito. `wrangler pages dev --local` funciona normalmente (D1 local
+# emulado por Miniflare), mas qualquer deploy real falhará até a criação
+# remota ser autorizada e o `database_id` real ser preenchido aqui.
+[[d1_databases]]
+binding = "INTEL_DB"
+database_name = "elevepdf-intelligence"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations-intelligence"
+
+[[env.preview.d1_databases]]
+binding = "INTEL_DB"
+database_name = "elevepdf-intelligence-preview"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations-intelligence"
+
 # Variáveis usadas pelos endpoints de Analytics — ver functions/api/analytics/.
 # CF_ACCESS_TEAM_DOMAIN e CF_ACCESS_AUD ficam ausentes de propósito: enquanto
 # não forem configuradas em produção, GET /api/analytics/summary responde 503
