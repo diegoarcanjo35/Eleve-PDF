@@ -27,6 +27,27 @@ import { buildWebApplicationJsonLd, jsonLdScriptTag } from "../shared/seo/struct
 
 const DIST_DIR = resolve("dist");
 
+/**
+ * Feature flag da Eleve IA (Sprint 01H) — mesma variável de ambiente que
+ * `src/featureFlags.ts` lê via `import.meta.env` dentro do bundle do
+ * navegador; aqui é lida via `process.env` porque este script roda em Node
+ * puro (`tsx`), fora do pipeline do Vite. Uma única variável, duas formas de
+ * leitura conforme o runtime — nunca duas fontes de verdade divergentes.
+ * Fail-closed: ausente ou diferente de "true" = desligada.
+ */
+const ELEVE_IA_ENABLED = process.env.VITE_ELEVE_IA_ENABLED === "true";
+
+/**
+ * Enquanto a Eleve IA estiver desligada, `/conversar-com-pdf` não deve ser
+ * indexável nem apontar canonical — mesmo tratamento dado à 404
+ * (`SEO_NOT_FOUND` abaixo). Não modifica `SEO_PAGES` (que descreve o estado
+ * "ligado"), só a cópia usada para gerar o HTML estático desta rota.
+ */
+function seoPageForBuild(page: SeoPageMeta): SeoPageMeta {
+  if (page.path !== "/conversar-com-pdf" || ELEVE_IA_ENABLED) return page;
+  return { ...page, robots: "noindex, nofollow", canonical: false };
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -105,7 +126,7 @@ function main() {
   for (const page of SEO_PAGES) {
     if (page.path === "/") continue;
     const relativePath = `${page.path.replace(/^\//, "")}.html`;
-    writeRouteFile(relativePath, injectMeta(baseHtml, page, true));
+    writeRouteFile(relativePath, injectMeta(baseHtml, seoPageForBuild(page), true));
   }
 
   for (const page of SEO_PRIVATE_PAGES) {

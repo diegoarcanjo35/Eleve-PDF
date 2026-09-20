@@ -13,29 +13,29 @@ describe("isAllowedRequestOrigin", () => {
     expect(isAllowedRequestOrigin(PROD_ORIGIN, PROD_HOST, OFF)).toBe(true);
   });
 
-  it("2. aceita a raiz do preview do projeto eleve-pdf com a flag ligada", () => {
-    const origin = "https://eleve-pdf.pages.dev";
-    const host = "eleve-pdf.pages.dev";
+  it("2. aceita a raiz do preview do projeto eleve-pdf-az0 com a flag ligada", () => {
+    const origin = "https://eleve-pdf-az0.pages.dev";
+    const host = "eleve-pdf-az0.pages.dev";
     expect(isAllowedRequestOrigin(origin, host, PREVIEW_ON)).toBe(true);
   });
 
   it("3. aceita um preview de branch (subdomínio nomeado) com a flag ligada", () => {
-    const origin = "https://fase-teste.eleve-pdf.pages.dev";
-    const host = "fase-teste.eleve-pdf.pages.dev";
+    const origin = "https://fase-teste.eleve-pdf-az0.pages.dev";
+    const host = "fase-teste.eleve-pdf-az0.pages.dev";
     expect(isAllowedRequestOrigin(origin, host, PREVIEW_ON)).toBe(true);
   });
 
   it("4. aceita um preview por hash de deployment com a flag ligada", () => {
-    const origin = "https://abc123.eleve-pdf.pages.dev";
-    const host = "abc123.eleve-pdf.pages.dev";
+    const origin = "https://abc123.eleve-pdf-az0.pages.dev";
+    const host = "abc123.eleve-pdf-az0.pages.dev";
     expect(isAllowedRequestOrigin(origin, host, PREVIEW_ON)).toBe(true);
   });
 
-  it("5. rejeita qualquer preview do eleve-pdf quando a flag está desligada", () => {
-    const origin = "https://fase-teste.eleve-pdf.pages.dev";
-    const host = "fase-teste.eleve-pdf.pages.dev";
+  it("5. rejeita qualquer preview do eleve-pdf-az0 quando a flag está desligada", () => {
+    const origin = "https://fase-teste.eleve-pdf-az0.pages.dev";
+    const host = "fase-teste.eleve-pdf-az0.pages.dev";
     expect(isAllowedRequestOrigin(origin, host, OFF)).toBe(false);
-    expect(isAllowedRequestOrigin("https://eleve-pdf.pages.dev", "eleve-pdf.pages.dev", OFF)).toBe(false);
+    expect(isAllowedRequestOrigin("https://eleve-pdf-az0.pages.dev", "eleve-pdf-az0.pages.dev", OFF)).toBe(false);
   });
 
   it("6. rejeita o domínio pages.dev de outro projeto, mesmo com a flag ligada", () => {
@@ -44,30 +44,37 @@ describe("isAllowedRequestOrigin", () => {
     expect(isAllowedRequestOrigin(origin, host, PREVIEW_ON)).toBe(false);
   });
 
+  it("6a. rejeita o domínio pages.dev antigo (sem sufixo), mesmo com a flag ligada — é outro projeto Pages (infra antiga, confirmado no gate de pré-ativação: elevepdf.elevesites.com.br resolve para ele, não para eleve-pdf-az0)", () => {
+    expect(isAllowedRequestOrigin("https://eleve-pdf.pages.dev", "eleve-pdf.pages.dev", PREVIEW_ON)).toBe(false);
+    expect(
+      isAllowedRequestOrigin("https://fase-teste.eleve-pdf.pages.dev", "fase-teste.eleve-pdf.pages.dev", PREVIEW_ON),
+    ).toBe(false);
+  });
+
   it("7. rejeita domínio sufixado por evil.com, mesmo com a flag ligada", () => {
-    const origin = "https://eleve-pdf.pages.dev.evil.com";
-    const host = "eleve-pdf.pages.dev.evil.com";
+    const origin = "https://eleve-pdf-az0.pages.dev.evil.com";
+    const host = "eleve-pdf-az0.pages.dev.evil.com";
     expect(isAllowedRequestOrigin(origin, host, PREVIEW_ON)).toBe(false);
   });
 
   it("8. rejeita prefixo malicioso colado ao domínio real, mesmo com a flag ligada", () => {
-    const origin = "https://evil-eleve-pdf.pages.dev";
-    const host = "evil-eleve-pdf.pages.dev";
+    const origin = "https://evil-eleve-pdf-az0.pages.dev";
+    const host = "evil-eleve-pdf-az0.pages.dev";
     expect(isAllowedRequestOrigin(origin, host, PREVIEW_ON)).toBe(false);
   });
 
   it("9. rejeita HTTP em preview, mesmo com a flag ligada", () => {
-    const origin = "http://fase-teste.eleve-pdf.pages.dev";
-    const host = "fase-teste.eleve-pdf.pages.dev";
+    const origin = "http://fase-teste.eleve-pdf-az0.pages.dev";
+    const host = "fase-teste.eleve-pdf-az0.pages.dev";
     expect(isAllowedRequestOrigin(origin, host, PREVIEW_ON)).toBe(false);
   });
 
   it("10. rejeita Origin e Host divergentes, mesmo quando cada um sozinho seria permitido", () => {
-    const originA = "https://alice.eleve-pdf.pages.dev";
-    const hostB = "bob.eleve-pdf.pages.dev";
+    const originA = "https://alice.eleve-pdf-az0.pages.dev";
+    const hostB = "bob.eleve-pdf-az0.pages.dev";
     expect(isAllowedRequestOrigin(originA, hostB, PREVIEW_ON)).toBe(false);
     // Origin de produção com Host de preview (ambos individualmente válidos em seus próprios contextos).
-    expect(isAllowedRequestOrigin(PROD_ORIGIN, "fase-teste.eleve-pdf.pages.dev", PREVIEW_ON)).toBe(false);
+    expect(isAllowedRequestOrigin(PROD_ORIGIN, "fase-teste.eleve-pdf-az0.pages.dev", PREVIEW_ON)).toBe(false);
   });
 
   it("11. localhost continua rejeitado quando ANALYTICS_ALLOW_LOCAL_DEV está desligada", () => {

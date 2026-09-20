@@ -12,9 +12,10 @@
   <url>
     <loc>https://elevepdf.elevesites.com.br/juntar-pdfs</loc>
   </url>
-  <url>
-    <loc>https://elevepdf.elevesites.com.br/conversar-com-pdf</loc>
-  </url>
+  <!-- /conversar-com-pdf removida da Sprint 01H em diante: a Eleve IA está
+       atrás da feature flag ELEVE_IA_ENABLED (ver wrangler.toml e
+       src/featureFlags.ts), desligada por padrão. Reintroduzir esta linha
+       só quando a flag for ativada de verdade em produção. -->
   <url>
     <loc>https://elevepdf.elevesites.com.br/privacidade</loc>
   </url>

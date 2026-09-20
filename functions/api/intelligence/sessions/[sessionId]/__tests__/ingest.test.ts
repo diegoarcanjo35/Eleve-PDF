@@ -77,6 +77,7 @@ function callIngest(
       AI: makeFakeAi(),
       VECTORIZE: makeFakeVectorize().vectorize,
       RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET,
+      ELEVE_IA_ENABLED: "true",
       ...env,
     },
     params: { sessionId },
@@ -104,6 +105,26 @@ describe("POST /api/intelligence/sessions/:sessionId/ingest", () => {
 
     expect(sessions.get(sessionId)!.status).toBe("ready");
     expect(insertedChunks.length).toBeGreaterThan(0);
+  });
+
+  it("Sprint 01H — feature flag desligada: 404, zero chamadas a AI/Vectorize/D1, mesmo com sessão e capability válidas", async () => {
+    const { db, sessions, insertedChunks } = makeFakeIntelligenceDb();
+    const { sessionId, capability } = await seedAuthorizedSession(sessions);
+    const ai = makeFakeAi();
+    const { vectorize, upserted } = makeFakeVectorize();
+
+    const response = await callIngest(
+      sessionId,
+      { INTEL_DB: db as never, AI: ai, VECTORIZE: vectorize, ELEVE_IA_ENABLED: "false" } as never,
+      validPayload(),
+      authHeader(capability),
+    );
+
+    expect(response.status).toBe(404);
+    expect(ai.run).not.toHaveBeenCalled();
+    expect(upserted).toHaveLength(0);
+    expect(insertedChunks).toHaveLength(0);
+    expect(sessions.get(sessionId)!.status).toBe("created");
   });
 
   it("sessão inexistente: 401 (mesma resposta genérica de autorização — nunca revela que a sessão não existe)", async () => {

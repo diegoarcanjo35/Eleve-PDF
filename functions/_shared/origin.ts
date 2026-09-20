@@ -1,10 +1,20 @@
 /**
- * Verificação de Origin/Host para os endpoints de Analytics. Same-origin
- * estrito em produção; localhost liberado só para desenvolvimento local
- * (nunca é o valor configurado em produção); subdomínios de preview do
- * projeto Pages `eleve-pdf` liberados só quando ANALYTICS_ALLOW_PAGES_PREVIEW
- * está explicitamente habilitado (sempre "false" em produção — ver
- * wrangler.toml).
+ * Verificação de Origin/Host para os endpoints de Analytics e de
+ * Inteligência Documental. Same-origin estrito em produção; localhost
+ * liberado só para desenvolvimento local (nunca é o valor configurado em
+ * produção); subdomínios de preview do projeto Pages liberados só quando
+ * ANALYTICS_ALLOW_PAGES_PREVIEW está explicitamente habilitado (sempre
+ * "false" em produção — ver wrangler.toml).
+ *
+ * Domínio pages.dev do projeto (Sprint 01H): o projeto Pages `eleve-pdf` da
+ * conta destino (fd553a9aacdf161483f2e376a16a9a4d) recebeu o slug
+ * `eleve-pdf-az0.pages.dev` — o Cloudflare acrescenta um sufixo assim
+ * quando o nome puro já está em uso por OUTRO projeto Pages. Confirmado no
+ * gate de pré-ativação (auditoria read-only): `elevepdf.elevesites.com.br`
+ * hoje resolve para `eleve-pdf.pages.dev` (sem sufixo) — um projeto
+ * DIFERENTE, de infraestrutura antiga, que este código não deve reconhecer
+ * como preview de si mesmo. Por isso `eleve-pdf.pages.dev` (sem sufixo)
+ * nunca é aceito aqui, mesmo com o preview habilitado.
  */
 const PRODUCTION_ORIGIN = "https://elevepdf.elevesites.com.br";
 const PRODUCTION_HOST = "elevepdf.elevesites.com.br";
@@ -12,17 +22,19 @@ const PRODUCTION_HOST = "elevepdf.elevesites.com.br";
 const LOCAL_DEV_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 const LOCAL_DEV_HOST_PATTERN = /^(localhost|127\.0\.0\.1)(:\d+)?$/;
 
-// Escopo estrito ao domínio *.pages.dev do projeto Pages `eleve-pdf` — nunca
-// qualquer outro projeto Pages, nunca `*.pages.dev` genérico. Cada rótulo de
-// subdomínio é validado explicitamente (alfanumérico + hífen interno, sem
-// `:`, `@`, `/` ou `.` fora dos separadores) para que nada disfarçado de
-// credencial ou caminho passe como parte do host. A âncora final `$` combinada
-// com o rótulo fechado impede sufixos como `.eleve-pdf.pages.dev.evil.com` e
-// prefixos colados como `evil-eleve-pdf.pages.dev` (que só "parecem" terminar
-// com o domínio certo por substring, mas não têm o `.` separador exigido).
+// Escopo estrito ao domínio *.pages.dev do projeto Pages `eleve-pdf-az0` —
+// nunca qualquer outro projeto Pages (incluindo o antigo `eleve-pdf.pages.dev`
+// sem sufixo, hoje confirmado como infraestrutura diferente — ver comentário
+// acima), nunca `*.pages.dev` genérico. Cada rótulo de subdomínio é validado
+// explicitamente (alfanumérico + hífen interno, sem `:`, `@`, `/` ou `.` fora
+// dos separadores) para que nada disfarçado de credencial ou caminho passe
+// como parte do host. A âncora final `$` combinada com o rótulo fechado
+// impede sufixos como `.eleve-pdf-az0.pages.dev.evil.com` e prefixos colados
+// como `evil-eleve-pdf-az0.pages.dev` (que só "parecem" terminar com o
+// domínio certo por substring, mas não têm o `.` separador exigido).
 const PAGES_PREVIEW_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
-const PAGES_PREVIEW_ORIGIN_PATTERN = new RegExp(`^https://(?:${PAGES_PREVIEW_LABEL}\\.)*eleve-pdf\\.pages\\.dev$`);
-const PAGES_PREVIEW_HOST_PATTERN = new RegExp(`^(?:${PAGES_PREVIEW_LABEL}\\.)*eleve-pdf\\.pages\\.dev$`);
+const PAGES_PREVIEW_ORIGIN_PATTERN = new RegExp(`^https://(?:${PAGES_PREVIEW_LABEL}\\.)*eleve-pdf-az0\\.pages\\.dev$`);
+const PAGES_PREVIEW_HOST_PATTERN = new RegExp(`^(?:${PAGES_PREVIEW_LABEL}\\.)*eleve-pdf-az0\\.pages\\.dev$`);
 
 export interface OriginCheckOptions {
   /** "true" só em desenvolvimento local — nunca em produção nem em preview. */

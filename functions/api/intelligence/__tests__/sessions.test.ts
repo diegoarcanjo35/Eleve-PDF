@@ -78,7 +78,7 @@ describe("POST /api/intelligence/sessions", () => {
     const { db, insertedSessionCalls } = makeStatefulFakeDb();
     const response = await onRequestPost({
       request: makeRequest(),
-      env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET },
+      env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ELEVE_IA_ENABLED: "true" },
     } as never);
     expect(response.status).toBe(201);
     const body = (await response.json()) as {
@@ -105,7 +105,7 @@ describe("POST /api/intelligence/sessions", () => {
     const { db } = makeStatefulFakeDb();
     const response = await onRequestPost({
       request: makeRequest({ Origin: "https://attacker.example.com" }),
-      env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET },
+      env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ELEVE_IA_ENABLED: "true" },
     } as never);
     expect(response.status).toBe(403);
     expect(db.prepare).not.toHaveBeenCalled();
@@ -117,7 +117,7 @@ describe("POST /api/intelligence/sessions", () => {
     for (let i = 0; i < 25; i += 1) {
       const response = await onRequestPost({
         request: makeRequest({ "CF-Connecting-IP": "203.0.113.55" }),
-        env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET },
+        env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ELEVE_IA_ENABLED: "true" },
       } as never);
       lastStatus = response.status;
     }
@@ -133,7 +133,7 @@ describe("POST /api/intelligence/sessions", () => {
     for (let i = 0; i < 11; i += 1) {
       const response = await onRequestPost({
         request: makeRequest({ "CF-Connecting-IP": "203.0.113.99" }),
-        env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET },
+        env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ELEVE_IA_ENABLED: "true" },
       } as never);
       lastStatus = response.status;
     }
@@ -144,7 +144,7 @@ describe("POST /api/intelligence/sessions", () => {
     const { db, sessions } = makeStatefulFakeDb();
     const response = await onRequestPost({
       request: makeRequest(),
-      env: { INTEL_DB: db as never },
+      env: { INTEL_DB: db as never, ELEVE_IA_ENABLED: "true" },
     } as never);
     expect(response.status).toBe(503);
     expect(sessions.size).toBe(0);
@@ -158,7 +158,7 @@ describe("POST /api/intelligence/sessions", () => {
     };
     const response = await onRequestPost({
       request: makeRequest(),
-      env: { INTEL_DB: failingDb as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET },
+      env: { INTEL_DB: failingDb as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ELEVE_IA_ENABLED: "true" },
     } as never);
     expect(response.status).toBe(503);
   });
@@ -182,16 +182,37 @@ describe("POST /api/intelligence/sessions", () => {
     };
     const response = await onRequestPost({
       request: makeRequest(),
-      env: { INTEL_DB: partiallyFailingDb as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET },
+      env: { INTEL_DB: partiallyFailingDb as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ELEVE_IA_ENABLED: "true" },
     } as never);
     expect(response.status).toBe(500);
+  });
+
+  it("Sprint 01H — feature flag desligada (padrão): 404, D1 nunca tocado, mesmo com Origin/HMAC válidos", async () => {
+    const { db, sessions } = makeStatefulFakeDb();
+    const response = await onRequestPost({
+      request: makeRequest(),
+      env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET },
+    } as never);
+    expect(response.status).toBe(404);
+    expect(db.prepare).not.toHaveBeenCalled();
+    expect(sessions.size).toBe(0);
+  });
+
+  it("Sprint 01H — feature flag com valor diferente de \"true\": continua desligada (404)", async () => {
+    const { db } = makeStatefulFakeDb();
+    const response = await onRequestPost({
+      request: makeRequest(),
+      env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ELEVE_IA_ENABLED: "false" },
+    } as never);
+    expect(response.status).toBe(404);
+    expect(db.prepare).not.toHaveBeenCalled();
   });
 
   it("10. resposta de erro nunca contém a capability (corpo vazio)", async () => {
     const { db } = makeStatefulFakeDb();
     const response = await onRequestPost({
       request: makeRequest({ Origin: "https://attacker.example.com" }),
-      env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET },
+      env: { INTEL_DB: db as never, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ELEVE_IA_ENABLED: "true" },
     } as never);
     const text = await response.text();
     expect(text).toBe("");

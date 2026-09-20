@@ -70,7 +70,7 @@ function validQuery(query = "Qual é a capital do Brasil?") {
 }
 
 function baseEnv(overrides: Record<string, unknown> = {}) {
-  return { RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ...overrides };
+  return { RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ELEVE_IA_ENABLED: "true", ...overrides };
 }
 
 describe("POST /api/intelligence/sessions/:sessionId/retrieve", () => {
@@ -104,6 +104,24 @@ describe("POST /api/intelligence/sessions/:sessionId/retrieve", () => {
       endPage: 1,
     });
     expect(JSON.stringify(body)).not.toMatch(/"values"|"embedding"/i);
+  });
+
+  it("Sprint 01H — feature flag desligada: 404, zero chamadas a AI/Vectorize, mesmo com sessão e capability válidas", async () => {
+    const { db, sessions, chunks } = makeFakeIntelligenceDb();
+    const { sessionId, capability } = await seedReadySession(sessions);
+    seedChunk(chunks, sessionId, 0, "Brasília é a capital do Brasil.", [1]);
+    const ai = makeFakeAi();
+    const vectorize = makeFakeVectorize([{ id: `${sessionId}:0`, sessionId, score: 0.95 }]);
+
+    const response = await onRequestPost({
+      request: makeRequest(sessionId, validQuery(), authHeader(capability)),
+      env: baseEnv({ INTEL_DB: db, AI: ai, VECTORIZE: vectorize, ELEVE_IA_ENABLED: "false" }),
+      params: { sessionId },
+    } as never);
+
+    expect(response.status).toBe(404);
+    expect(ai.run).not.toHaveBeenCalled();
+    expect(vectorize.query).not.toHaveBeenCalled();
   });
 
   it("sessão inexistente: 401 (mesma resposta genérica de autorização), nunca consulta o Vectorize", async () => {

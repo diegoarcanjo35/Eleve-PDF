@@ -105,7 +105,13 @@ function callAsk(
 ) {
   return onRequestPost({
     request: makeRequest(sessionId, body, overrides, rawBody),
-    env: { AI: makeFakeAi(), OPENAI_API_KEY: "sk-test", RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ...env },
+    env: {
+      AI: makeFakeAi(),
+      OPENAI_API_KEY: "sk-test",
+      RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET,
+      ELEVE_IA_ENABLED: "true",
+      ...env,
+    },
     params: { sessionId },
   } as never);
 }
@@ -117,6 +123,27 @@ describe("POST /api/intelligence/sessions/:sessionId/ask", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("Sprint 01H — feature flag desligada: 404, zero chamadas a AI/Vectorize/Luna, mesmo com sessão e capability válidas", async () => {
+    const { db, sessions, chunks } = makeFakeIntelligenceDb();
+    const { sessionId, capability } = await seedReadySession(sessions);
+    seedChunk(chunks, sessionId, 0, "conteúdo real", [1]);
+    const ai = makeFakeAi();
+    const vectorize = makeFakeVectorize([{ id: `${sessionId}:0`, sessionId, score: 0.9 }]);
+    const fetchMock = mockLunaSuccess({ answer: "x", evidenceIds: [], insufficientEvidence: false });
+
+    const response = await callAsk(
+      sessionId,
+      { INTEL_DB: db, AI: ai, VECTORIZE: vectorize, ELEVE_IA_ENABLED: "false" } as never,
+      validQuestion(),
+      authHeader(capability),
+    );
+
+    expect(response.status).toBe(404);
+    expect(ai.run).not.toHaveBeenCalled();
+    expect(vectorize.query).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("1. sessão inexistente: 401 (mesma resposta genérica de autorização), Luna nunca chamado", async () => {
@@ -135,7 +162,14 @@ describe("POST /api/intelligence/sessions/:sessionId/ask", () => {
 
     const response = await onRequestPost({
       request: makeRequest(sessionId, validQuestion()),
-      env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: makeFakeVectorize([]), OPENAI_API_KEY: "sk-test", RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET } as never,
+      env: {
+        INTEL_DB: db,
+        AI: makeFakeAi(),
+        VECTORIZE: makeFakeVectorize([]),
+        OPENAI_API_KEY: "sk-test",
+        RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET,
+        ELEVE_IA_ENABLED: "true",
+      } as never,
       params: { sessionId },
     } as never);
     expect(response.status).toBe(401);
@@ -494,7 +528,7 @@ describe("POST /api/intelligence/sessions/:sessionId/ask", () => {
 
     const response = await onRequestPost({
       request: makeRequest(sessionId, validQuestion(), authHeader(capability)),
-      env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: vectorize, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET }, // sem OPENAI_API_KEY
+      env: { INTEL_DB: db, AI: makeFakeAi(), VECTORIZE: vectorize, RATE_LIMIT_HMAC_KEY: TEST_HMAC_SECRET, ELEVE_IA_ENABLED: "true" }, // sem OPENAI_API_KEY
       params: { sessionId },
     } as never);
 

@@ -25,8 +25,9 @@ import {
 import { embedTexts, upsertChunkVectors } from "../../../../_shared/intelligenceIndexing";
 import { logIntelligenceTelemetry } from "../../../../_shared/intelligenceTelemetry";
 import { isExpired } from "../../../../_shared/intelligenceSession";
+import { isEleveIaEnabled, type EleveIaFlagEnv } from "../../../../_shared/featureFlags";
 
-interface Env {
+interface Env extends EleveIaFlagEnv {
   INTEL_DB: IntelligenceD1;
   AI: Ai;
   VECTORIZE: Vectorize;
@@ -63,6 +64,12 @@ function unauthorizedError(): Response {
  */
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
+
+  // Feature flag (Sprint 01H) — primeiríssima checagem, antes de qualquer
+  // outra coisa (sessionId, Origin/Host, rate limit, D1, embedding,
+  // Vectorize). Ver `_shared/featureFlags.ts`.
+  if (!isEleveIaEnabled(env)) return genericError(404);
+
   const sessionId = typeof params.sessionId === "string" ? params.sessionId : null;
   if (!sessionId) return genericError(404);
 

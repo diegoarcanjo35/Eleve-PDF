@@ -8,8 +8,9 @@ import { enforceDistributedRateLimit } from "../../_shared/distributedRateLimit"
 import { createSession, type IntelligenceD1 } from "../../_shared/intelligenceDb";
 import { computeExpiresAt, generateSessionId } from "../../_shared/intelligenceSession";
 import { generateSessionCapability, hashCapability } from "../../_shared/sessionCapability";
+import { isEleveIaEnabled, type EleveIaFlagEnv } from "../../_shared/featureFlags";
 
-interface Env {
+interface Env extends EleveIaFlagEnv {
   INTEL_DB: IntelligenceD1;
   /** Secret de assinatura HMAC do rate limit distribuído (Sprint 01E.1) —
    * nunca commitado, nunca logado, nunca enviado ao Analytics. Ausente =>
@@ -42,6 +43,12 @@ function genericError(status: number): Response {
  */
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
+
+  // Feature flag (Sprint 01H) — primeiríssima checagem, antes de Origin/Host,
+  // rate limit ou qualquer uso do D1 de Intelligence. Ver
+  // `_shared/featureFlags.ts`.
+  if (!isEleveIaEnabled(env)) return genericError(404);
+
   const allowLocalDev = env.ANALYTICS_ALLOW_LOCAL_DEV === "true";
   const allowPagesPreview = env.ANALYTICS_ALLOW_PAGES_PREVIEW === "true";
 

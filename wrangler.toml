@@ -1,12 +1,25 @@
 # Configuração do Cloudflare Pages para o ElevePDF.
 #
 # Bancos D1 reais (Fase 2.3E): produção usa `elevepdf-analytics`, preview usa
-# `elevepdf-analytics-preview`, ambos criados na conta Criativoselevados@gmail.com.
-# `d1_databases` não é uma chave herdável em Pages (ver docs oficiais de Wrangler
-# Configuration para Pages), então o binding de preview é declarado de forma
-# explícita e completa em [[env.preview.d1_databases]], sem depender de herança
-# do bloco top-level — que serve à produção e ao `wrangler pages dev --local`
-# (que usa emulação local de D1 por padrão e ignora o `database_id` real).
+# `elevepdf-analytics-preview`. `d1_databases` não é uma chave herdável em
+# Pages (ver docs oficiais de Wrangler Configuration para Pages), então o
+# binding de preview é declarado de forma explícita e completa em
+# [[env.preview.d1_databases]], sem depender de herança do bloco top-level —
+# que serve à produção e ao `wrangler pages dev --local` (que usa emulação
+# local de D1 por padrão e ignora o `database_id` real).
+#
+# IDs corrigidos na Sprint 01H: o gate de pré-ativação (auditoria read-only)
+# confirmou que os IDs anteriormente declarados aqui (9efbfa40... e
+# 38e7597b...) não existem na conta destino
+# (fd553a9aacdf161483f2e376a16a9a4d) — pertencem à conta antiga
+# (Criativoselevados@gmail.com), que segue intocada e fora de uso deste
+# wrangler.toml. Os IDs abaixo são os bancos reais já existentes na conta
+# destino sob os mesmos nomes — ver `wrangler d1 list`. IMPORTANTE: nenhum
+# dos dois bancos tem as migrations de Analytics aplicadas ainda (estão
+# vazios, só com a tabela interna `_cf_KV`) — corrigir o ID aqui NÃO os
+# torna funcionais; aplicar `migrations/0001_analytics_events.sql` e
+# `migrations/0002_add_juntar_pdfs.sql` continua pendente e é
+# deliberadamente fora do escopo desta sprint (só código/config local).
 name = "eleve-pdf"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-01-01"
@@ -14,13 +27,13 @@ compatibility_date = "2026-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "elevepdf-analytics"
-database_id = "9efbfa40-2e1d-4f7b-82c9-68b99502ddb9"
+database_id = "a9289c2f-f9ed-44bb-80a2-160170862cf5"
 migrations_dir = "migrations"
 
 [[env.preview.d1_databases]]
 binding = "DB"
 database_name = "elevepdf-analytics-preview"
-database_id = "38e7597b-692b-4545-9930-0a0a9fdaef6e"
+database_id = "4f0eb0de-9836-4a57-a571-09db9d7a02f5"
 migrations_dir = "migrations"
 
 # --- Inteligência Documental (Fase 01, Sprint 01B / 01B.1) ---
@@ -71,15 +84,27 @@ index_name = "elevepdf-conversar-pdf-embeddings"
 # não forem configuradas em produção, GET /api/analytics/summary responde 503
 # (painel bloqueado por padrão — ver relatório, "Proteção obrigatória").
 # ANALYTICS_ALLOW_PAGES_PREVIEW fica "false" aqui de propósito — só é "true"
-# em [env.preview.vars], para liberar Origin/Host de *.eleve-pdf.pages.dev
+# em [env.preview.vars], para liberar Origin/Host de *.eleve-pdf-az0.pages.dev
 # somente nos deployments de preview (ver functions/_shared/origin.ts).
+#
+# ELEVE_IA_ENABLED (Sprint 01H): feature flag fail-closed do backend — ver
+# `functions/_shared/featureFlags.ts`. Ausente ou "false" = toda a Eleve IA
+# fica indisponível (rota, CTA e as quatro rotas de `/api/intelligence/*`).
+# Deliberadamente "false" em AMBOS os ambientes nesta sprint — nenhuma
+# ativação foi autorizada ainda. Tem um par no frontend, `VITE_ELEVE_IA_ENABLED`
+# (ver `src/featureFlags.ts`), que precisa ser configurado à parte no processo
+# de build do Vite (variável de ambiente de build do projeto Pages, fora
+# deste wrangler.toml) — as duas devem mudar juntas quando a ativação for
+# autorizada; nenhuma das duas foi tocada nesta sprint.
 [vars]
 ANALYTICS_ALLOW_LOCAL_DEV = "false"
 ANALYTICS_ALLOW_PAGES_PREVIEW = "false"
+ELEVE_IA_ENABLED = "false"
 
 # `vars` também não é herdável: como env.preview já sobrescreve d1_databases,
-# precisa repetir vars aqui — senão o preview perde ANALYTICS_ALLOW_LOCAL_DEV
-# e ANALYTICS_ALLOW_PAGES_PREVIEW.
+# precisa repetir vars aqui — senão o preview perde ANALYTICS_ALLOW_LOCAL_DEV,
+# ANALYTICS_ALLOW_PAGES_PREVIEW e ELEVE_IA_ENABLED.
 [env.preview.vars]
 ANALYTICS_ALLOW_LOCAL_DEV = "false"
 ANALYTICS_ALLOW_PAGES_PREVIEW = "true"
+ELEVE_IA_ENABLED = "false"

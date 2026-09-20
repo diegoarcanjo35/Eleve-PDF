@@ -6,6 +6,7 @@ import { getAvailableTools } from "@/toolsRegistry";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { track } from "@/analytics/client";
 import { findSeoPage } from "@shared/seo/pages";
+import { ELEVE_IA_ENABLED } from "@/featureFlags";
 
 const PAGE_META = findSeoPage("/")!;
 
@@ -60,26 +61,28 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="section intel-promo" aria-labelledby="intel-promo-title">
-          <div className="intel-promo__text">
-            <p className="section__kicker">Novidade</p>
-            <h2 className="section__title" id="intel-promo-title">
-              Converse com seu PDF usando a Eleve IA
-            </h2>
-            <p className="section__lead">
-              Envie um documento e faça perguntas sobre o conteúdo dele. A Eleve IA responde com
-              base no seu PDF e sempre mostra as páginas de origem.
-            </p>
-          </div>
-          <Link
-            to="/conversar-com-pdf"
-            className="button button--primary"
-            onClick={() => track("tool_open", { cta_id: "hero_conversar", tool_id: "conversar-com-pdf" })}
-          >
-            Conversar com um PDF
-            <ArrowRight size={16} aria-hidden="true" />
-          </Link>
-        </section>
+        {ELEVE_IA_ENABLED && (
+          <section className="section intel-promo" aria-labelledby="intel-promo-title">
+            <div className="intel-promo__text">
+              <p className="section__kicker">Novidade</p>
+              <h2 className="section__title" id="intel-promo-title">
+                Converse com seu PDF usando a Eleve IA
+              </h2>
+              <p className="section__lead">
+                Envie um documento e faça perguntas sobre o conteúdo dele. A Eleve IA responde com
+                base no seu PDF e sempre mostra as páginas de origem.
+              </p>
+            </div>
+            <Link
+              to="/conversar-com-pdf"
+              className="button button--primary"
+              onClick={() => track("tool_open", { cta_id: "hero_conversar", tool_id: "conversar-com-pdf" })}
+            >
+              Conversar com um PDF
+              <ArrowRight size={16} aria-hidden="true" />
+            </Link>
+          </section>
+        )}
 
         <section className="section" aria-label="Privacidade e confiança">
           <ul className="trust-list">

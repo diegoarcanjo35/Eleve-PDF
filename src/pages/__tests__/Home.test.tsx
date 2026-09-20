@@ -45,6 +45,14 @@ describe("Home", () => {
     expect(await screen.findByText("Página de juntar")).toBeInTheDocument();
   });
 
+  it("Sprint 01H — Eleve IA desligada por padrão: CTA/promo não aparece na Home", () => {
+    renderHome();
+    expect(
+      screen.queryByRole("heading", { name: /converse com seu pdf usando a eleve ia/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /conversar com um pdf/i })).not.toBeInTheDocument();
+  });
+
   it("cartões 'Em breve' não são links nem acionáveis", () => {
     renderHome();
     const comingSoonTitle = screen.getByRole("heading", { name: "Organizar páginas" });
