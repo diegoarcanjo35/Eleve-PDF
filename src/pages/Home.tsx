@@ -38,7 +38,8 @@ export default function Home() {
             Ferramentas simples para otimizar e organizar seus PDFs, direto no navegador.
           </p>
           <p className="hero__note">
-            Grátis, direto no navegador e sem enviar seus documentos para nossos servidores.
+            Grátis e direto no navegador — nas ferramentas clássicas, sem enviar seus documentos
+            para nossos servidores.
           </p>
           <div className="hero__actions">
             <Link

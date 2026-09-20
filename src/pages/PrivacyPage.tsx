@@ -74,16 +74,26 @@ export default function PrivacyPage() {
             vetores, o banco vetorial Cloudflare Vectorize para indexação temporária desses
             vetores, e a API da OpenAI para gerar a resposta final a partir da pergunta e dos
             trechos relevantes. Nenhum desses fornecedores recebe o arquivo PDF original — apenas
-            o texto extraído dele, ou trechos e representações derivadas desse texto.
+            o texto extraído dele, ou trechos e representações derivadas desse texto. Segundo a
+            documentação atual da Cloudflare, o que processamos no Workers AI (entradas, saídas e
+            embeddings) é tratado como "Customer Content": a Cloudflare não usa esse conteúdo para
+            treinar os modelos disponibilizados no Workers AI, nem para melhorar seus próprios
+            serviços ou de terceiros, sem consentimento explícito. Esse conteúdo pode ficar
+            armazenado enquanto usado em conjunto com um serviço de armazenamento como o Vectorize
+            — no nosso caso, pelo período da indexação temporária da sessão.
           </p>
           <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
             <strong>OpenAI:</strong> na chamada à OpenAI enviamos apenas o necessário para gerar a
-            resposta — sua pergunta e os trechos de evidência relevantes do documento. Essa
-            chamada usa a opção <code>store: false</code> da OpenAI, que solicita que a interação
-            não seja retida pela OpenAI para fins como treinamento. Isso reflete a configuração
-            usada pelo ElevePDF nessa chamada; não é uma garantia de retenção zero por parte da
-            OpenAI, e não temos base documentada para afirmar mais do que isso sobre a política
-            interna da OpenAI.
+            resposta — sua pergunta e os trechos de evidência relevantes do documento. Segundo a
+            documentação atual da OpenAI, dados enviados pela API não são usados por padrão para
+            treinar ou melhorar os modelos, salvo adesão explícita a esse uso — adesão que o
+            ElevePDF não faz. Essa chamada usa a opção <code>store: false</code>, que evita reter a
+            interação para fins como histórico da conversa. Isso não equivale a "Zero Data
+            Retention" (ZDR): a própria OpenAI mantém, separadamente, logs de monitoramento de
+            abuso da API que podem conter o conteúdo enviado, retidos por até 30 dias no regime
+            padrão, ressalvadas exceções previstas pela OpenAI. ZDR é um controle adicional,
+            disponível só para organizações elegíveis e aprovadas — o ElevePDF não possui esse
+            controle hoje.
           </p>
           <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
             <strong>Rede e segurança:</strong> para conter abusos, como excesso de requisições, o
