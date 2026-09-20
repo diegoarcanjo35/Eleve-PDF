@@ -89,6 +89,10 @@ export default function Home() {
               </li>
             ))}
           </ul>
+          <p style={{ color: "var(--ink-soft)", fontSize: 13.5, marginTop: 8 }}>
+            Essas garantias valem para as ferramentas clássicas. A Eleve IA funciona de um jeito
+            diferente — veja como em <Link to="/privacidade">Privacidade e métricas</Link>.
+          </p>
         </section>
 
         <section className="section" id="ferramentas" aria-labelledby="ferramentas-title">

@@ -9,7 +9,8 @@ export function ConsentBanner() {
     <div className="consent-banner" role="region" aria-label="Escolha sobre métricas">
       <p className="consent-banner__text">
         Usamos métricas próprias e pseudônimas para entender quais ferramentas são utilizadas e
-        melhorar o ElevePDF. Seus PDFs nunca são enviados.
+        melhorar o ElevePDF. Essas métricas nunca incluem o conteúdo dos seus arquivos — veja como
+        cada ferramenta trata seus dados em Privacidade.
       </p>
       <div className="consent-banner__actions">
         <button

@@ -6,8 +6,9 @@ export function Footer() {
     <footer className="site-footer">
       <div className="site-footer__inner">
         <p className="site-footer__row">
-          Seus arquivos são processados no seu dispositivo e não ficam armazenados em nossos
-          servidores.
+          Ferramentas clássicas do ElevePDF processam seus arquivos no seu dispositivo, sem envio
+          a servidores. A Eleve IA funciona de um jeito diferente — veja como cada uma trata seus
+          arquivos em Privacidade e métricas.
         </p>
         <p className="site-footer__row">
           <span className="site-footer__credit">ElevePDF — Desenvolvido por Diego Arcanjo Web Studio</span>

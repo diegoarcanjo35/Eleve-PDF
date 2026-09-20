@@ -23,9 +23,10 @@ export default function PrivacyPage() {
         <div className="tool-page__header">
           <h1 className="tool-page__title">Privacidade e métricas</h1>
           <p className="tool-page__description">
-            Seus PDFs são processados inteiramente no seu dispositivo e nunca são enviados para
-            nenhum servidor — isso não muda, independentemente da sua escolha abaixo sobre
-            métricas.
+            O ElevePDF tem duas formas de processar seus arquivos. As ferramentas clássicas
+            (compactar, dividir, juntar) processam tudo inteiramente no seu dispositivo, sem
+            enviar nada a nenhum servidor. A Eleve IA funciona de um jeito diferente, explicado
+            abaixo. Nenhuma das duas muda conforme sua escolha sobre métricas.
           </p>
         </div>
 
@@ -35,6 +36,81 @@ export default function PrivacyPage() {
             O PDF que você envia nunca sai do seu dispositivo. Toda a compactação e divisão
             acontecem dentro do seu navegador, em um Web Worker — nenhum arquivo, nome, conteúdo
             ou metadado do documento trafega pela rede em nenhum momento.
+          </p>
+
+          <h2 style={{ margin: 0, fontSize: 18 }}>Eleve IA</h2>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            A Eleve IA é a funcionalidade "Converse com seu PDF": você envia um documento e faz
+            perguntas sobre o conteúdo dele. O texto do PDF é extraído primeiro localmente, no seu
+            navegador. Em seguida, o texto extraído — não o arquivo PDF original — é enviado aos
+            serviços de inteligência do ElevePDF para ser dividido em trechos, transformado em
+            representações numéricas (embeddings) e indexado temporariamente. Quando você faz uma
+            pergunta, o sistema busca os trechos mais relevantes do seu documento e usa um modelo
+            de linguagem para gerar uma resposta fundamentada nesses trechos, sempre indicando as
+            páginas de origem. Sua pergunta também é enviada para gerar essa resposta.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>Sessão temporária:</strong> hoje a Eleve IA não exige cadastro nem login. Ao
+            enviar um PDF, é criada uma sessão temporária apenas para aquele documento — não
+            existe uma Biblioteca de documentos, histórico entre sessões, nem "memória" do
+            documento entre visitas. A sessão expira automaticamente após um período curto de
+            inatividade. Como parte do processo de expiração pode depender de rotinas internas que
+            não são instantâneas, não prometemos exclusão garantida no exato instante da
+            expiração — o objetivo é que o conteúdo da sessão deixe de ser acessível e seja
+            removido em um prazo curto.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>Conteúdo processado:</strong> para a Eleve IA funcionar, diferentes tipos de
+            conteúdo podem estar em jogo: o arquivo PDF original (permanece só no seu navegador);
+            o texto extraído dele; trechos (chunks) desse texto; representações numéricas
+            (embeddings) desses trechos; as perguntas que você digita; as respostas geradas; as
+            evidências (trechos e páginas) usadas para fundamentar cada resposta; e informações
+            técnicas de operação do sistema, como contagem de páginas ou status de processamento.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>Fornecedores:</strong> a Eleve IA usa infraestrutura da Cloudflare
+            (armazenamento temporário e execução das funções de backend), o serviço de embeddings
+            da própria Cloudflare (Workers AI, modelo BGE-M3) para transformar trechos de texto em
+            vetores, o banco vetorial Cloudflare Vectorize para indexação temporária desses
+            vetores, e a API da OpenAI para gerar a resposta final a partir da pergunta e dos
+            trechos relevantes. Nenhum desses fornecedores recebe o arquivo PDF original — apenas
+            o texto extraído dele, ou trechos e representações derivadas desse texto.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>OpenAI:</strong> na chamada à OpenAI enviamos apenas o necessário para gerar a
+            resposta — sua pergunta e os trechos de evidência relevantes do documento. Essa
+            chamada usa a opção <code>store: false</code> da OpenAI, que solicita que a interação
+            não seja retida pela OpenAI para fins como treinamento. Isso reflete a configuração
+            usada pelo ElevePDF nessa chamada; não é uma garantia de retenção zero por parte da
+            OpenAI, e não temos base documentada para afirmar mais do que isso sobre a política
+            interna da OpenAI.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>Rede e segurança:</strong> para conter abusos, como excesso de requisições, o
+            ElevePDF usa um identificador de rede pseudonimizado por HMAC — não o endereço IP em
+            texto claro — para aplicar limites de uso. Isso não significa que nenhuma camada de
+            infraestrutura tenha contato com o IP real: a Cloudflare, como qualquer provedor de
+            borda, pode processar metadados de rede tecnicamente necessários para entregar as
+            requisições. O que o ElevePDF, como aplicação, evita fazer é armazenar o IP bruto
+            associado a esse controle de uso.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>Analytics:</strong> o sistema de métricas descrito no restante desta página
+            nunca recebe o conteúdo do PDF, o nome do arquivo, a pergunta feita à Eleve IA, a
+            resposta gerada, os trechos de evidência, o identificador de sessão da Eleve IA nem o
+            segredo de autorização dessa sessão. O modelo de consentimento de métricas descrito
+            abaixo vale também para a página Converse com seu PDF.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>OCR:</strong> a versão atual da Eleve IA não realiza reconhecimento óptico de
+            caracteres. Documentos que sejam só imagem, sem texto extraível — por exemplo, PDFs
+            escaneados sem camada de texto — não são processados pela Eleve IA.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>Recursos que ainda não existem:</strong> Biblioteca de documentos, conta de
+            usuário, memória do documento entre sessões, compartilhamento e um plano Business não
+            fazem parte da versão atual do ElevePDF. Se algum desses recursos for lançado no
+            futuro, esta página será atualizada antes disso.
           </p>
 
           <h2 style={{ margin: 0, fontSize: 18 }}>O que as métricas registram, e só depois do seu consentimento</h2>

@@ -27,11 +27,45 @@ export default function TermsPage() {
         </div>
 
         <section className="tools" aria-label="Termos de uso">
-          <h2 style={{ margin: 0, fontSize: 18 }}>Uso gratuito e processamento local</h2>
+          <h2 style={{ margin: 0, fontSize: 18 }}>Uso gratuito e processamento local (ferramentas clássicas)</h2>
           <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
-            O ElevePDF é gratuito. Todo o processamento dos seus arquivos — compactação e divisão —
-            acontece dentro do seu próprio navegador. Nenhum PDF enviado por você trafega pela rede
-            ou é armazenado em qualquer servidor nosso.
+            O ElevePDF é gratuito. Nas ferramentas clássicas — compactar, dividir e juntar — todo o
+            processamento dos seus arquivos acontece dentro do seu próprio navegador. Nenhum PDF
+            enviado por você nessas ferramentas trafega pela rede ou é armazenado em qualquer
+            servidor nosso. A Eleve IA funciona de um jeito diferente, descrito a seguir.
+          </p>
+
+          <h2 style={{ margin: 0, fontSize: 18 }}>Eleve IA</h2>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            A Eleve IA auxilia na localização, síntese e compreensão de informações existentes nos
+            documentos enviados pelo usuário. Diferente das ferramentas clássicas, para funcionar
+            ela envia o texto extraído do seu PDF — não o arquivo original — a serviços de
+            processamento de linguagem. Os detalhes completos desse fluxo estão na página de{" "}
+            <Link to="/privacidade">Privacidade e métricas</Link>.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>Limitações:</strong> respostas geradas pela Eleve IA podem conter erros,
+            interpretar incorretamente um trecho, omitir contexto relevante ou não identificar
+            todas as informações pertinentes do documento. A Eleve IA é uma ferramenta de apoio,
+            não uma fonte de verdade absoluta.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>Evidências:</strong> cada resposta da Eleve IA indica os trechos e páginas do
+            documento usados para gerá-la, para facilitar a conferência. Você deve sempre verificar
+            a informação relevante diretamente no documento original antes de tomar qualquer
+            decisão com base nela.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>Decisões importantes:</strong> a Eleve IA não substitui a avaliação de um
+            profissional qualificado em assuntos jurídicos, financeiros, médicos ou outras decisões
+            de alto impacto. Use as respostas como ponto de partida para sua própria análise, não
+            como decisão final.
+          </p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
+            <strong>Sua responsabilidade pelo conteúdo enviado:</strong> ao usar a Eleve IA, você
+            declara ter a autorização ou o direito necessário para processar os documentos que
+            envia. Como em qualquer sistema que recebe arquivos de terceiros, o conteúdo enviado é
+            tratado pelo sistema como dado não confiável até ser processado.
           </p>
 
           <h2 style={{ margin: 0, fontSize: 18 }}>Sua responsabilidade pelos documentos</h2>
@@ -75,8 +109,9 @@ export default function TermsPage() {
           <h2 style={{ margin: 0, fontSize: 18 }}>Disponibilidade e mudanças</h2>
           <p style={{ color: "var(--ink-soft)", fontSize: 14.5, lineHeight: 1.6 }}>
             O ElevePDF é oferecido "como está", sem garantia de disponibilidade contínua ou
-            ininterrupta. O serviço e estes termos podem ser atualizados a qualquer momento,
-            conforme o ElevePDF evolui.
+            ininterrupta. O serviço, incluindo suas funcionalidades — como a Eleve IA — pode
+            evoluir, ser ajustado ou ampliado ao longo do tempo, e estes termos podem ser
+            atualizados a qualquer momento, conforme o ElevePDF evolui.
           </p>
 
           <h2 style={{ margin: 0, fontSize: 18 }}>Métricas e privacidade</h2>

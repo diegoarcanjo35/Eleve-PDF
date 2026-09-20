@@ -85,7 +85,7 @@ export const SEO_PAGES: SeoPageMeta[] = [
     path: "/privacidade",
     title: "Privacidade e métricas — ElevePDF",
     description:
-      "Como o ElevePDF processa seus PDFs localmente e quais métricas pseudônimas e opcionais são usadas, sempre com consentimento explícito.",
+      "Como o ElevePDF trata seus arquivos nas ferramentas clássicas e na Eleve IA, e quais métricas pseudônimas e opcionais são usadas, sempre com consentimento explícito.",
     robots: "index, follow",
     social: true,
     canonical: true,
@@ -94,7 +94,7 @@ export const SEO_PAGES: SeoPageMeta[] = [
     path: "/termos-de-uso",
     title: "Termos de Uso — ElevePDF",
     description:
-      "Termos de uso do ElevePDF: processamento local dos arquivos, responsabilidade do usuário e limites reais da compactação e da divisão.",
+      "Termos de uso do ElevePDF: processamento local nas ferramentas clássicas, natureza e limitações da Eleve IA, responsabilidade do usuário e limites reais da compactação e da divisão.",
     robots: "index, follow",
     social: true,
     canonical: true,
