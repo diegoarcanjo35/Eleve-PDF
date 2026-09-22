@@ -68,7 +68,7 @@ export function DocumentViewerPane({
         >
           <ChevronLeft size={16} aria-hidden="true" />
         </button>
-        <span className="intel-viewer__page-indicator">
+        <span className="intel-viewer__page-indicator" aria-live="polite">
           Página {currentPage} de {pageCount}
         </span>
         <button

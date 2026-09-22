@@ -10,6 +10,7 @@ import { useIntelligenceSession, type IntelligenceStage } from "@/hooks/useIntel
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { track } from "@/analytics/client";
 import { findSeoPage } from "@shared/seo/pages";
+import { IntelligenceHttpError, friendlyIntelligenceErrorMessage } from "@/lib/intelligenceErrors";
 
 const TOOL_ID = "conversar-com-pdf" as const;
 const PAGE_META = findSeoPage("/conversar-com-pdf")!;
@@ -72,15 +73,15 @@ export default function ConversarComPdfPage() {
             return { ...message, status: "answered", answer, evidence };
           }),
         );
-      } catch {
+      } catch (error) {
+        const friendlyMessage =
+          error instanceof IntelligenceHttpError
+            ? friendlyIntelligenceErrorMessage(error.status, "asking")
+            : friendlyIntelligenceErrorMessage(undefined, "asking");
         setMessages((prev) =>
           prev.map((message): ChatMessage =>
             message.role === "assistant" && message.id === pendingId
-              ? {
-                  ...message,
-                  status: "error",
-                  errorMessage: "Não foi possível obter uma resposta agora. Tente novamente.",
-                }
+              ? { ...message, status: "error", errorMessage: friendlyMessage }
               : message,
           ),
         );
@@ -155,7 +156,12 @@ export default function ConversarComPdfPage() {
             </span>
           </div>
 
-          {stage === "idle" && <UploadZone onFileSelected={handleFileSelected} />}
+          {stage === "idle" && (
+            <UploadZone
+              onFileSelected={handleFileSelected}
+              hint="Apenas arquivos .pdf · o texto necessário é processado com segurança pela Eleve IA"
+            />
+          )}
 
           {file && stage !== "idle" && (
             <FileCard

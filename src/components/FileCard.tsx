@@ -31,7 +31,7 @@ export function FileCard({
           {pageCount !== null ? ` · ${pageCount} página${pageCount === 1 ? "" : "s"}` : ""}
         </p>
         {status === "validating" && (
-          <p className="file-card__status file-card__status--pending">Validando arquivo…</p>
+          <p className="file-card__status file-card__status--pending">Processando…</p>
         )}
         {status === "error" && (
           <p className="file-card__status file-card__status--error" role="alert">

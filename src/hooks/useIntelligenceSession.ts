@@ -3,6 +3,7 @@ import { requestExtractText, requestValidate } from "@/lib/pdfWorkerClient";
 import { ingestExtractedDocument } from "@/lib/intelligenceIngestClient";
 import { askQuestion, type AskResult } from "@/lib/intelligenceAskClient";
 import { PdfAppError, messageFor } from "@/lib/errors";
+import { IntelligenceHttpError, friendlyIntelligenceErrorMessage } from "@/lib/intelligenceErrors";
 import { track } from "@/analytics/client";
 import type { ExtractedDocument, ExtractProgress } from "@/lib/pdfExtractText";
 
@@ -44,7 +45,8 @@ interface UseIntelligenceSessionResult {
 
 function toFriendlyError(error: unknown): string {
   if (error instanceof PdfAppError) return messageFor(error.code);
-  return "Não foi possível preparar este documento. Tente novamente.";
+  if (error instanceof IntelligenceHttpError) return friendlyIntelligenceErrorMessage(error.status, "preparing");
+  return friendlyIntelligenceErrorMessage(undefined, "preparing");
 }
 
 /**

@@ -1406,6 +1406,30 @@ a.tool-card:hover {
   min-height: 360px;
 }
 
+/* Abaixo de 900px, viewer e chat empilham (ver `.intel-layout__panes`
+   acima). Travar `.intel-layout` em `height:100vh` nesse empilhamento
+   pode fazer o conteúdo (viewer com altura mínima + chat) ultrapassar a
+   viewport sem nenhuma rolagem possível. Solução simples e previsível:
+   abaixo de 900px a página cresce normalmente (altura automática) e o
+   documento inteiro rola, como qualquer outra página do site. Este bloco
+   fica DEPOIS das regras incondicionais acima de propósito — sem isso,
+   `min-height: 360px` (mesma especificidade) venceria por ordem de
+   declaração mesmo dentro da media query. */
+@media (max-width: 899.98px) {
+  .intel-layout {
+    height: auto;
+    max-height: none;
+  }
+
+  .intel-layout__viewer {
+    min-height: 280px;
+  }
+
+  .intel-layout__chat {
+    min-height: 420px;
+  }
+}
+
 .intel-layout__chat-header {
   display: flex;
   align-items: center;
@@ -1492,6 +1516,36 @@ a.tool-card:hover {
   font-size: 14.5px;
   margin: auto 0;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.intel-chat__quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.intel-chat__quick-action {
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.intel-chat__quick-action:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-2);
+}
+
+.intel-chat__quick-action:disabled {
+  opacity: 0.5;
 }
 
 .intel-message {

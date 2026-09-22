@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Send } from "lucide-react";
 import { MAX_QUESTION_CHARS } from "@shared/intelligence/constants";
 import type { AskEvidence } from "@shared/intelligence/types";
@@ -35,6 +35,17 @@ const INSUFFICIENT_EVIDENCE_MESSAGE =
 const PROPAGATING_MESSAGE =
   "Ainda estamos finalizando a preparação deste documento. Tente perguntar novamente em alguns segundos.";
 
+/** Sugestões genéricas, úteis para qualquer tipo de documento — nunca
+ * assumem que o PDF é um contrato, nunca prometem funcionalidade que ainda
+ * não existe (ex.: nada de "compare com outro documento"). Mostradas só
+ * antes da primeira pergunta (ver `messages.length === 0` abaixo). */
+const QUICK_ACTIONS = [
+  "Resuma este documento",
+  "Quais são os pontos principais?",
+  "Encontre datas importantes",
+  "Quais valores aparecem no documento?",
+] as const;
+
 /**
  * Chat da Eleve IA — histórico só em memória (não é conversa multi-turno no
  * backend: cada pergunta chega isolada ao `/ask`, ver `useIntelligenceSession`).
@@ -43,22 +54,65 @@ const PROPAGATING_MESSAGE =
  */
 export function ChatPanel({ messages, onSend, onNavigateToSource, sending }: ChatPanelProps) {
   const [question, setQuestion] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
+  // Leva o foco direto para o campo de pergunta assim que o chat fica
+  // disponível (o próprio ChatPanel só existe quando `stage === "ready"`) —
+  // ajuda quem navega por teclado/leitor de tela a não precisar procurar.
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  /** Único caminho de envio — usado tanto pelo submit do form (clique no
+   * botão ou Enter nativo) quanto pelo atalho de teclado abaixo, para que
+   * "Enter" e "clique" sejam garantidamente a mesma função. */
+  const trySend = () => {
     const trimmed = question.trim();
     if (!trimmed || sending) return;
     onSend(trimmed);
     setQuestion("");
   };
 
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    trySend();
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    // Sempre previne o Enter nativo do form (mesmo com Shift) — assim
+    // Shift+Enter nunca dispara envio, independente do comportamento padrão
+    // do navegador para um <input> de linha única dentro de um <form>.
+    event.preventDefault();
+    if (event.shiftKey) return;
+    trySend();
+  };
+
+  const handleQuickAction = (text: string) => {
+    if (sending) return;
+    onSend(text);
+  };
+
   return (
     <div className="intel-chat">
       <div className="intel-chat__messages" role="log" aria-live="polite">
         {messages.length === 0 && (
-          <p className="intel-chat__empty">
-            Faça uma pergunta sobre o conteúdo deste documento para começar.
-          </p>
+          <div className="intel-chat__empty">
+            <p>Faça uma pergunta sobre o conteúdo deste documento para começar.</p>
+            <div className="intel-chat__quick-actions">
+              {QUICK_ACTIONS.map((text) => (
+                <button
+                  key={text}
+                  type="button"
+                  className="intel-chat__quick-action"
+                  onClick={() => handleQuickAction(text)}
+                  disabled={sending}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {messages.map((message) =>
           message.role === "user" ? (
@@ -104,6 +158,7 @@ export function ChatPanel({ messages, onSend, onNavigateToSource, sending }: Cha
           Pergunta sobre o documento
         </label>
         <input
+          ref={inputRef}
           id="intel-question"
           type="text"
           className="intel-chat__input"
@@ -112,6 +167,7 @@ export function ChatPanel({ messages, onSend, onNavigateToSource, sending }: Cha
           maxLength={MAX_QUESTION_CHARS}
           disabled={sending}
           onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={handleKeyDown}
         />
         <button
           type="submit"

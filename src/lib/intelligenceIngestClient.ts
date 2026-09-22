@@ -2,6 +2,7 @@ import type { ExtractedDocument } from "./pdfExtractText";
 import { INGESTION_CONTRACT_VERSION } from "@shared/intelligence/constants";
 import type { IngestionPayloadV1 } from "@shared/intelligence/types";
 import { authorizationHeader } from "./intelligenceAuth";
+import { IntelligenceHttpError } from "./intelligenceErrors";
 
 const SESSIONS_ENDPOINT = "/api/intelligence/sessions";
 
@@ -41,7 +42,7 @@ export function toIngestionPayload(document: ExtractedDocument): IngestionPayloa
 export async function createIntelligenceSession(): Promise<CreateSessionResult> {
   const response = await fetch(SESSIONS_ENDPOINT, { method: "POST", credentials: "omit" });
   if (!response.ok) {
-    throw new Error(`Falha ao criar sessão temporária (status ${response.status}).`);
+    throw new IntelligenceHttpError(response.status, `Falha ao criar sessão temporária (status ${response.status}).`);
   }
   return (await response.json()) as CreateSessionResult;
 }
@@ -54,7 +55,7 @@ async function ingestPayload(sessionId: string, sessionCapability: string, paylo
     credentials: "omit",
   });
   if (!response.ok) {
-    throw new Error(`Falha na ingestão (status ${response.status}).`);
+    throw new IntelligenceHttpError(response.status, `Falha na ingestão (status ${response.status}).`);
   }
   return (await response.json()) as IngestResult;
 }

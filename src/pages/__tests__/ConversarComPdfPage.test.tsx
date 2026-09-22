@@ -25,9 +25,14 @@ interface FetchLogEntry {
 
 let fetchLog: FetchLogEntry[];
 let askResponse: { body: unknown; status: number };
+/** Sprint 01N: quando definido, o mock de `/ingest` aguarda esta promise
+ * antes de responder — usado só pelo teste do estado "preparando", que
+ * precisa de uma janela observável entre o upload e o `stage: "ready"`. */
+let ingestGate: Promise<void> | null = null;
 
 function installFetchMock() {
   fetchLog = [];
+  ingestGate = null;
   askResponse = {
     body: { sessionId: SESSION_ID, answer: "Resposta de teste.", insufficientEvidence: false, evidence: [] },
     status: 200,
@@ -47,6 +52,7 @@ function installFetchMock() {
         );
       }
       if (url === `/api/intelligence/sessions/${SESSION_ID}/ingest`) {
+        if (ingestGate) await ingestGate;
         return new Response(
           JSON.stringify({
             sessionId: SESSION_ID,
@@ -248,7 +254,7 @@ describe("ConversarComPdfPage", () => {
     }
   });
 
-  it("16. erro do backend em /ask vira mensagem de erro controlada, sem detalhes técnicos", async () => {
+  it("16. erro do backend em /ask vira mensagem de erro controlada, sem detalhes técnicos (Sprint 01N: 502 tem mensagem específica de indisponibilidade)", async () => {
     mockSuccessfulExtraction();
     askResponse = { status: 502, body: { error: "detalhe interno que nunca deveria aparecer" } };
     const { container } = renderPage();
@@ -257,7 +263,7 @@ describe("ConversarComPdfPage", () => {
     await userEvent.click(screen.getByRole("button", { name: /enviar pergunta/i }));
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
-    expect(screen.getByRole("alert")).toHaveTextContent(/não foi possível obter uma resposta/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/indisponível/i);
     expect(screen.queryByText(/detalhe interno/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/502/)).not.toBeInTheDocument();
   });
@@ -272,5 +278,124 @@ describe("ConversarComPdfPage", () => {
     expect(screen.getByRole("heading", { name: "Converse com seu PDF" })).toBeInTheDocument();
     expect(screen.getByText(/arraste um pdf aqui/i)).toBeInTheDocument();
     second.unmount();
+  });
+
+  it("6. estado 'preparando' mostra progresso em linguagem simples, sem termos técnicos", async () => {
+    mockSuccessfulExtraction();
+    let releaseGate!: () => void;
+    ingestGate = new Promise((resolve) => {
+      releaseGate = resolve;
+    });
+    const { container } = renderPage();
+    await uploadFile(container);
+
+    await waitFor(() => expect(screen.getByText(/preparando a eleve ia para conversar/i)).toBeInTheDocument());
+    const progress = screen.getByText(/preparando a eleve ia para conversar/i).closest(".progress");
+    expect(progress).not.toBeNull();
+    const progressText = progress?.textContent ?? "";
+    expect(progressText).not.toMatch(/vectorize|embedding|chunk|d1|workers ai|luna|provider|token/i);
+
+    releaseGate();
+    await waitFor(() => expect(screen.getByPlaceholderText(/pergunte algo/i)).toBeInTheDocument());
+  });
+
+  it("7. estado 'pronto' mostra o campo de pergunta interativo, sem termos técnicos visíveis", async () => {
+    mockSuccessfulExtraction();
+    const { container } = renderPage();
+    await reachReadyState(container);
+
+    const input = screen.getByPlaceholderText(/pergunte algo/i);
+    expect(input).toBeEnabled();
+    expect(document.body.textContent).not.toMatch(/vectorize|embedding|chunk|workers ai|luna\b/i);
+  });
+
+  it("21. relevantPage é preservado end-to-end e o badge mostra a página precisa e a amplitude real", async () => {
+    mockSuccessfulExtraction(); // documento mockado tem pageCount=2
+    askResponse = {
+      status: 200,
+      body: {
+        sessionId: SESSION_ID,
+        answer: "O código é HZ-9274.",
+        insufficientEvidence: false,
+        evidence: [{ evidenceId: "E1", chunkId: `${SESSION_ID}:0`, pages: [1, 2], startPage: 1, endPage: 2, relevantPage: 2 }],
+      },
+    };
+    const { container } = renderPage();
+    await reachReadyState(container);
+    await userEvent.type(screen.getByPlaceholderText(/pergunte algo/i), "Qual é o código?");
+    await userEvent.click(screen.getByRole("button", { name: /enviar pergunta/i }));
+
+    await waitFor(() => expect(screen.getByText("Página 2 · fonte: páginas 1–2")).toBeInTheDocument());
+    await userEvent.click(screen.getByText("Página 2 · fonte: páginas 1–2"));
+    expect((screen.getByTitle(/visualização de documento\.pdf/i) as HTMLIFrameElement).src).toContain("#page=2");
+  });
+
+  it("sessão expirada (410) em /ask mostra mensagem específica orientando a trocar de documento", async () => {
+    mockSuccessfulExtraction();
+    askResponse = { status: 410, body: null };
+    const { container } = renderPage();
+    await reachReadyState(container);
+    await userEvent.type(screen.getByPlaceholderText(/pergunte algo/i), "pergunta");
+    await userEvent.click(screen.getByRole("button", { name: /enviar pergunta/i }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("alert")).toHaveTextContent(/expirou/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/trocar documento/i);
+  });
+
+  it("rate limit (429) em /ask mostra mensagem específica, sem culpar o usuário nem expor status", async () => {
+    mockSuccessfulExtraction();
+    askResponse = { status: 429, body: null };
+    const { container } = renderPage();
+    await reachReadyState(container);
+    await userEvent.type(screen.getByPlaceholderText(/pergunte algo/i), "pergunta");
+    await userEvent.click(screen.getByRole("button", { name: /enviar pergunta/i }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("alert")).toHaveTextContent(/muitas solicitações/i);
+    expect(screen.queryByText(/429/)).not.toBeInTheDocument();
+  });
+
+  it("indisponibilidade (503) em /ask mostra mensagem de indisponibilidade temporária", async () => {
+    mockSuccessfulExtraction();
+    askResponse = { status: 503, body: null };
+    const { container } = renderPage();
+    await reachReadyState(container);
+    await userEvent.type(screen.getByPlaceholderText(/pergunte algo/i), "pergunta");
+    await userEvent.click(screen.getByRole("button", { name: /enviar pergunta/i }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("alert")).toHaveTextContent(/indisponível/i);
+  });
+
+  it("33. trocar de documento limpa o histórico de chat anterior — próxima resposta nunca parece pertencer ao documento antigo", async () => {
+    mockSuccessfulExtraction();
+    askResponse = {
+      status: 200,
+      body: { sessionId: SESSION_ID, answer: "Resposta do primeiro documento.", insufficientEvidence: false, evidence: [] },
+    };
+    const { container } = renderPage();
+    await reachReadyState(container);
+    await userEvent.type(screen.getByPlaceholderText(/pergunte algo/i), "pergunta");
+    await userEvent.click(screen.getByRole("button", { name: /enviar pergunta/i }));
+    await waitFor(() => expect(screen.getByText("Resposta do primeiro documento.")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /trocar documento/i }));
+
+    expect(screen.getByRole("heading", { name: "Converse com seu PDF" })).toBeInTheDocument();
+    expect(screen.queryByText("Resposta do primeiro documento.")).not.toBeInTheDocument();
+
+    await reachReadyState(container);
+    expect(screen.queryByText("Resposta do primeiro documento.")).not.toBeInTheDocument();
+  });
+
+  it("acessibilidade: campo de pergunta tem label associado e botão de envio tem nome acessível", async () => {
+    mockSuccessfulExtraction();
+    const { container } = renderPage();
+    await reachReadyState(container);
+
+    expect(screen.getByRole("textbox", { name: /pergunta sobre o documento/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /enviar pergunta/i })).toBeInTheDocument();
+    expect(screen.getByRole("log")).toHaveAttribute("aria-live", "polite");
   });
 });

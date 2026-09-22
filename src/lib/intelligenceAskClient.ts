@@ -1,6 +1,7 @@
 import { ASK_CONTRACT_VERSION } from "@shared/intelligence/constants";
 import type { AskEvidence } from "@shared/intelligence/types";
 import { authorizationHeader } from "./intelligenceAuth";
+import { IntelligenceHttpError } from "./intelligenceErrors";
 
 const SESSIONS_ENDPOINT = "/api/intelligence/sessions";
 
@@ -50,7 +51,7 @@ export async function askQuestion(
     return { kind: "propagating", data: (await response.json()) as AskPropagating };
   }
   if (!response.ok) {
-    throw new Error(`Falha ao perguntar à Eleve IA (status ${response.status}).`);
+    throw new IntelligenceHttpError(response.status, `Falha ao perguntar à Eleve IA (status ${response.status}).`);
   }
   return { kind: "answer", data: (await response.json()) as AskAnswer };
 }
