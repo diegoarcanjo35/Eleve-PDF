@@ -33,8 +33,14 @@ export const CHUNK_MAX_CHARS = 1500;
 export const CHUNK_OVERLAP_RATIO = 0.12;
 /** Versionamento explícito do algoritmo de chunking — persistido em cada
  * chunk e na sessão, para nunca precisar adivinhar depois qual estratégia
- * gerou um chunk específico. */
-export const CHUNKING_STRATEGY_VERSION = "v1-natural-break-char-target";
+ * gerou um chunk específico.
+ *
+ * v2 (Sprint 01L.1): acrescenta `pageSpans` (proveniência granular por
+ * página dentro de `chunk.text`) a cada chunk. O TEXTO/tamanho/overlap dos
+ * chunks é idêntico à v1 para a mesma entrada — só o metadado de
+ * proveniência mudou, nunca o algoritmo de corte em si (ver
+ * `chunking.test.ts`, "texto idêntico à v1"). */
+export const CHUNKING_STRATEGY_VERSION = "v2-natural-break-char-target-page-spans";
 
 // --- Retrieval (Fase 01, Sprint 01C) ---
 /** Versão do contrato de retrieval (pergunta -> chunks recuperados). */

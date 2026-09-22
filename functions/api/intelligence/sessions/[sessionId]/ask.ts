@@ -16,6 +16,7 @@ import { verifySessionCapability } from "../../../../_shared/sessionCapability";
 import { getSession, type IntelligenceD1 } from "../../../../_shared/intelligenceDb";
 import { retrieveChunks } from "../../../../_shared/intelligenceRetrieval";
 import { askLuna } from "../../../../_shared/lunaClient";
+import { resolveRelevantPage } from "../../../../_shared/relevantPageResolver";
 import { logIntelligenceTelemetry } from "../../../../_shared/intelligenceTelemetry";
 import { isExpired } from "../../../../_shared/intelligenceSession";
 import { isEleveIaEnabled, type EleveIaFlagEnv } from "../../../../_shared/featureFlags";
@@ -239,12 +240,24 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     const resolvedEvidence: AskEvidence[] = answer.evidenceIds.map((evidenceId) => {
       const chunk = evidenceMap.get(evidenceId)!;
+      // `relevantPage` (Sprint 01L.1): resolvido inteiramente aqui, no
+      // servidor, DEPOIS que o Luna já respondeu — nunca perguntado a ele
+      // (ver `resolveRelevantPage`). `undefined` sempre que a confiança não
+      // for suficiente; o cliente já sabe cair de volta para
+      // startPage–endPage nesse caso, exatamente como antes desta sprint.
+      const relevantPage = resolveRelevantPage({
+        question: ask.question,
+        answer: answer.answer,
+        chunkText: chunk.text,
+        pageSpans: chunk.pageSpans,
+      });
       return {
         evidenceId,
         chunkId: chunk.chunkId,
         pages: chunk.pages,
         startPage: chunk.startPage,
         endPage: chunk.endPage,
+        ...(relevantPage !== undefined ? { relevantPage } : {}),
       };
     });
 

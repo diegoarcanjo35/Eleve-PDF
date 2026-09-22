@@ -336,6 +336,73 @@ describe("POST /api/intelligence/sessions/:sessionId/ask", () => {
     expect(sentBody.input).toContain("[E2]");
   });
 
+  /** Monta chunkText + page_spans_json (mesma convenção de offset do
+   * chunker real: join por "\n", startOffset inclusivo, endOffset
+   * exclusivo) — ver `relevantPageResolver.test.ts` para a mesma técnica. */
+  function buildChunkWithPageSpans(pageTexts: string[]): { chunkText: string; pageSpansJson: string } {
+    const pageSpans: { page: number; startOffset: number; endOffset: number }[] = [];
+    let offset = 0;
+    const parts: string[] = [];
+    pageTexts.forEach((text, i) => {
+      const startOffset = offset;
+      const endOffset = startOffset + text.length;
+      pageSpans.push({ page: i + 1, startOffset, endOffset });
+      parts.push(text);
+      offset = endOffset + 1;
+    });
+    return { chunkText: parts.join("\n"), pageSpansJson: JSON.stringify(pageSpans) };
+  }
+
+  it("16. evidence com relevantPage: caso HZ-9274 (Gate 01K) resolvido de ponta a ponta via proveniência granular real", async () => {
+    const { db, sessions, chunks } = makeFakeIntelligenceDb();
+    const { sessionId, capability } = await seedReadySession(sessions);
+    const { chunkText, pageSpansJson } = buildChunkWithPageSpans([
+      "Projeto Horizonte reune uma equipe multidisciplinar responsavel pela viabilidade tecnica.",
+      "A primeira fase concentra-se no levantamento de requisitos funcionais do Projeto Horizonte.",
+      "O codigo de homologacao do Projeto Horizonte e HZ-9274, usado nos testes de integracao.",
+      "A fase final preve testes de aceitacao e estabilizacao do Projeto Horizonte.",
+    ]);
+    seedChunk(chunks, sessionId, 0, chunkText, [1, 2, 3, 4], pageSpansJson);
+    const vectorize = makeFakeVectorize([{ id: `${sessionId}:0`, sessionId, score: 0.9 }]);
+    mockLunaSuccess({
+      answer: "O código de homologação do Projeto Horizonte é HZ-9274.",
+      evidenceIds: ["E1"],
+      insufficientEvidence: false,
+    });
+
+    const response = await callAsk(
+      sessionId,
+      { INTEL_DB: db, VECTORIZE: vectorize },
+      validQuestion("Qual é o código de homologação do Projeto Horizonte?"),
+      authHeader(capability),
+    );
+    const body = (await response.json()) as { evidence: Array<{ evidenceId: string; startPage: number; endPage: number; relevantPage?: number }> };
+
+    expect(response.status).toBe(200);
+    expect(body.evidence).toHaveLength(1);
+    // Amplitude real do chunk nunca escondida — o Luna recuperou um chunk que cobre as 4 páginas.
+    expect(body.evidence[0]!.startPage).toBe(1);
+    expect(body.evidence[0]!.endPage).toBe(4);
+    // Página específica resolvida deterministicamente no servidor, nunca pelo Luna.
+    expect(body.evidence[0]!.relevantPage).toBe(3);
+  });
+
+  it("17. evidence sem relevantPage: chunk legado (sem page_spans_json) preserva o comportamento anterior à sprint, sem a chave", async () => {
+    const { db, sessions, chunks } = makeFakeIntelligenceDb();
+    const { sessionId, capability } = await seedReadySession(sessions);
+    seedChunk(chunks, sessionId, 0, "A coordenadora do Projeto Aurora é Marina Costa.", [1, 2]); // sem pageSpansJson (null)
+    const vectorize = makeFakeVectorize([{ id: `${sessionId}:0`, sessionId, score: 0.9 }]);
+    mockLunaSuccess({ answer: "Marina Costa.", evidenceIds: ["E1"], insufficientEvidence: false });
+
+    const response = await callAsk(sessionId, { INTEL_DB: db, VECTORIZE: vectorize }, validQuestion(), authHeader(capability));
+    const body = (await response.json()) as { evidence: Array<Record<string, unknown>> };
+
+    expect(response.status).toBe(200);
+    expect(body.evidence).toHaveLength(1);
+    expect(body.evidence[0]).toEqual({ evidenceId: "E1", chunkId: `${sessionId}:0`, pages: [1, 2], startPage: 1, endPage: 2 });
+    expect(body.evidence[0]).not.toHaveProperty("relevantPage");
+  });
+
   it("14. resposta grounded válida (caminho feliz completo)", async () => {
     const { db, sessions, chunks } = makeFakeIntelligenceDb();
     const { sessionId, capability } = await seedReadySession(sessions);

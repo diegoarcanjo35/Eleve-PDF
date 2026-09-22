@@ -34,6 +34,9 @@ export interface FakeChunkRow {
   end_page: number;
   pages_json: string;
   strategy_version: string;
+  /** Sprint 01L.1 — `null` por padrão em `seedChunk` (simula chunk legado).
+   * Ver `seedChunkWithPageSpans` para semear com proveniência granular. */
+  page_spans_json: string | null;
 }
 
 interface FakeRateLimitRow {
@@ -201,6 +204,7 @@ export function seedChunk(
   index: number,
   text: string,
   pages: number[],
+  pageSpansJson: string | null = null,
 ) {
   const id = `${sessionId}:${index}`;
   chunks.set(id, {
@@ -212,6 +216,7 @@ export function seedChunk(
     end_page: pages[pages.length - 1]!,
     pages_json: JSON.stringify(pages),
     strategy_version: "v1",
+    page_spans_json: pageSpansJson,
   });
   return id;
 }

@@ -35,4 +35,70 @@ describe("SourceBadges", () => {
     const { container } = render(<SourceBadges evidence={[]} onNavigateToPage={() => {}} />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("18. com relevantPage presente, o rótulo mostra a página específica E a amplitude real, e o clique navega para relevantPage", async () => {
+    const user = userEvent.setup();
+    const onNavigateToPage = vi.fn();
+    render(
+      <SourceBadges
+        evidence={[{ evidenceId: "E1", chunkId: "s:0", pages: [1, 2, 3, 4], startPage: 1, endPage: 4, relevantPage: 3 }]}
+        onNavigateToPage={onNavigateToPage}
+      />,
+    );
+    const badge = screen.getByText("Página 3 · fonte: páginas 1–4");
+    expect(badge).toBeInTheDocument();
+    await user.click(badge);
+    expect(onNavigateToPage).toHaveBeenCalledWith(3);
+  });
+
+  it("19. sem relevantPage (ambíguo ou chunk legado), comportamento é o de antes: rótulo só com a amplitude, clique navega para startPage", async () => {
+    const user = userEvent.setup();
+    const onNavigateToPage = vi.fn();
+    render(
+      <SourceBadges
+        evidence={[{ evidenceId: "E1", chunkId: "s:0", pages: [1, 2, 3, 4], startPage: 1, endPage: 4 }]}
+        onNavigateToPage={onNavigateToPage}
+      />,
+    );
+    const badge = screen.getByText("Páginas 1–4");
+    expect(badge).toBeInTheDocument();
+    expect(screen.queryByText(/fonte:/)).not.toBeInTheDocument();
+    await user.click(badge);
+    expect(onNavigateToPage).toHaveBeenCalledWith(1);
+  });
+
+  it("20. múltiplas evidências independentes: uma com relevantPage, outra sem, cada uma com seu próprio rótulo e navegação", async () => {
+    const user = userEvent.setup();
+    const onNavigateToPage = vi.fn();
+    render(
+      <SourceBadges
+        evidence={[
+          { evidenceId: "E1", chunkId: "s:0", pages: [1, 2, 3, 4], startPage: 1, endPage: 4, relevantPage: 3 },
+          { evidenceId: "E2", chunkId: "s:1", pages: [7, 8], startPage: 7, endPage: 8 },
+        ]}
+        onNavigateToPage={onNavigateToPage}
+      />,
+    );
+
+    const badgeWithRelevantPage = screen.getByText("Página 3 · fonte: páginas 1–4");
+    const badgeWithoutRelevantPage = screen.getByText("Páginas 7–8");
+    expect(badgeWithRelevantPage).toBeInTheDocument();
+    expect(badgeWithoutRelevantPage).toBeInTheDocument();
+
+    await user.click(badgeWithRelevantPage);
+    expect(onNavigateToPage).toHaveBeenLastCalledWith(3);
+    await user.click(badgeWithoutRelevantPage);
+    expect(onNavigateToPage).toHaveBeenLastCalledWith(7);
+  });
+
+  it("relevantPage igual a startPage===endPage (evidência de página única) não força o rótulo composto — mostra só 'Página N'", () => {
+    render(
+      <SourceBadges
+        evidence={[{ evidenceId: "E1", chunkId: "s:0", pages: [5], startPage: 5, endPage: 5, relevantPage: 5 }]}
+        onNavigateToPage={() => {}}
+      />,
+    );
+    expect(screen.getByText("Página 5")).toBeInTheDocument();
+    expect(screen.queryByText(/fonte:/)).not.toBeInTheDocument();
+  });
 });

@@ -42,6 +42,11 @@ export interface ChunkRow {
   end_page: number;
   pages_json: string;
   strategy_version: string;
+  /** Sprint 01L.1 — `null` para chunks persistidos antes desta sprint
+   * (coluna aditiva, sem backfill — ver migration 0006). JSON de
+   * `PageSpan[]`, nunca parseado aqui: quem consome decide como degradar
+   * na presença de `null`/JSON inválido (ver `getChunksByIds`). */
+  page_spans_json: string | null;
 }
 
 export async function createSession(
@@ -165,7 +170,7 @@ export async function getChunksByIds(db: IntelligenceD1, ids: string[]): Promise
   for (const id of ids) {
     const row = await db
       .prepare(
-        `SELECT id, session_id, chunk_index, text, start_page, end_page, pages_json, strategy_version
+        `SELECT id, session_id, chunk_index, text, start_page, end_page, pages_json, strategy_version, page_spans_json
          FROM intelligence_chunks WHERE id = ?`,
       )
       .bind(id)
@@ -180,8 +185,8 @@ export async function insertChunks(db: IntelligenceD1, sessionId: string, chunks
     await db
       .prepare(
         `INSERT INTO intelligence_chunks
-         (id, session_id, chunk_index, text, start_page, end_page, pages_json, strategy_version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, session_id, chunk_index, text, start_page, end_page, pages_json, strategy_version, page_spans_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         `${sessionId}:${chunk.index}`,
@@ -192,6 +197,7 @@ export async function insertChunks(db: IntelligenceD1, sessionId: string, chunks
         chunk.endPage,
         JSON.stringify(chunk.pages),
         chunk.chunkingStrategyVersion,
+        JSON.stringify(chunk.pageSpans),
       )
       .run();
   }

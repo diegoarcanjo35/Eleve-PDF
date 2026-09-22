@@ -1,0 +1,24 @@
+-- Migration 0006 (Inteligência Documental) — Fase 01, Sprint 01L.1.
+--
+-- Adiciona `page_spans_json` a `intelligence_chunks`: proveniência
+-- granular de página dentro do texto do chunk (ver
+-- `shared/intelligence/types.ts`, `PageSpan`, e
+-- `shared/intelligence/chunking.ts`, `computePageSpans`). Usada
+-- exclusivamente para resolver `relevantPage` de forma determinística e
+-- conservadora no momento da resposta (ver
+-- `functions/_shared/relevantPageResolver.ts`) — nunca para decidir
+-- retrieval, nunca enviada ao Luna, nunca usada como filtro do Vectorize.
+--
+-- Simples ALTER TABLE ADD COLUMN (sem CHECK constraint) — mesma técnica já
+-- usada nas migrations 0003/0004, suportada diretamente por SQLite/D1, sem
+-- precisar recriar a tabela.
+--
+-- Chunks existentes (anteriores a esta sprint) ficam com
+-- `page_spans_json` NULL. Decisão explícita desta sprint: NULL nunca é
+-- tratado como erro — só significa "proveniência granular indisponível
+-- para este chunk", e o servidor cai de volta no comportamento anterior
+-- (startPage/endPage agregados, sem `relevantPage`). Nenhum backfill é
+-- feito aqui — sessões são temporárias e de vida curta; não há dado
+-- antigo que precise ser reprocessado para continuar funcionando.
+
+ALTER TABLE intelligence_chunks ADD COLUMN page_spans_json TEXT;

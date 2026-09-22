@@ -1,7 +1,42 @@
 import { RETRIEVAL_EMPTY_RETRY_DELAY_MS, RETRIEVAL_TOP_K, VECTORIZE_PROPAGATION_GRACE_MS } from "../../shared/intelligence/constants";
-import type { RetrievedChunk } from "../../shared/intelligence/types";
+import type { PageSpan, RetrievedChunk } from "../../shared/intelligence/types";
 import { getChunksByIds, type IntelligenceD1 } from "./intelligenceDb";
 import { embedTexts } from "./intelligenceIndexing";
+
+/**
+ * Parseia `page_spans_json` com segurança — nunca lança. `null` (chunk
+ * legado, ver migration 0006) e JSON inválido/malformado são tratados
+ * exatamente da mesma forma: proveniência granular indisponível
+ * (`undefined`), nunca um erro que derrubaria o retrieval inteiro. Só
+ * aceita o formato esperado (array de objetos com `page`/`startOffset`/
+ * `endOffset` numéricos) — qualquer outra coisa também degrada para
+ * `undefined` em vez de repassar dado corrompido adiante.
+ */
+export function parsePageSpans(raw: string | null): PageSpan[] | undefined {
+  if (raw === null) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (!Array.isArray(parsed)) return undefined;
+  const spans: PageSpan[] = [];
+  for (const item of parsed) {
+    if (
+      typeof item !== "object" ||
+      item === null ||
+      typeof (item as Record<string, unknown>).page !== "number" ||
+      typeof (item as Record<string, unknown>).startOffset !== "number" ||
+      typeof (item as Record<string, unknown>).endOffset !== "number"
+    ) {
+      return undefined;
+    }
+    const span = item as { page: number; startOffset: number; endOffset: number };
+    spans.push({ page: span.page, startOffset: span.startOffset, endOffset: span.endOffset });
+  }
+  return spans;
+}
 
 export interface RetrievalEnv {
   INTEL_DB: IntelligenceD1;
@@ -41,6 +76,7 @@ async function queryChunksOnce(env: RetrievalEnv, sessionId: string, queryVector
       text: chunk.text,
       score: match.score,
       pages: JSON.parse(chunk.pages_json) as number[],
+      pageSpans: parsePageSpans(chunk.page_spans_json),
       startPage: chunk.start_page,
       endPage: chunk.end_page,
     });

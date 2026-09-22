@@ -27,6 +27,23 @@ export interface IngestionPayloadV1 {
   pages: IngestionPageV1[];
 }
 
+/**
+ * Proveniência granular (Sprint 01L.1): intervalo de `chunk.text` que veio
+ * de uma página específica. `startOffset` inclusivo, `endOffset` exclusivo
+ * — mesma convenção de `String.slice()`, então
+ * `chunk.text.slice(span.startOffset, span.endOffset)` sempre reproduz
+ * exatamente o trecho daquela página (incluindo os `\n` inseridos por
+ * `joinSegments` quando o span abrange mais de um segmento contíguo da
+ * mesma página). Spans são ordenados por `startOffset` crescente; a mesma
+ * página pode aparecer em mais de um span não-contíguo (ex.: depois do
+ * overlap reintroduzir um segmento de uma página já fechada).
+ */
+export interface PageSpan {
+  page: number;
+  startOffset: number;
+  endOffset: number;
+}
+
 /** Chunk produzido pelo chunking backend, com proveniência determinística de
  * página — nunca fabricada depois do fato. */
 export interface DocumentChunk {
@@ -37,6 +54,10 @@ export interface DocumentChunk {
   /** Páginas (ordenadas, únicas) que contribuíram texto para este chunk. */
   pages: number[];
   chunkingStrategyVersion: string;
+  /** Proveniência granular — ver `PageSpan`. Sempre presente em chunks
+   * recém-produzidos por `chunkDocument`; chunks legados (persistidos antes
+   * da Sprint 01L.1) não têm este dado — ver `RetrievedChunk.pageSpans`. */
+  pageSpans: PageSpan[];
 }
 
 /** Payload versionado enviado por `POST /api/intelligence/sessions/:id/retrieve`.
@@ -48,7 +69,10 @@ export interface RetrievalQueryV1 {
 }
 
 /** Um chunk recuperado, pronto para validação técnica — nunca inclui o
- * embedding, metadata interna, ou qualquer dado de outra sessão/documento. */
+ * embedding, metadata interna, ou qualquer dado de outra sessão/documento.
+ * `pageSpans` fica `undefined` para chunks persistidos antes da Sprint
+ * 01L.1 (coluna `page_spans_json` NULL/ausente no D1) — nunca um erro,
+ * degrada graciosamente para o comportamento anterior (sem `relevantPage`). */
 export interface RetrievedChunk {
   chunkId: string;
   text: string;
@@ -56,6 +80,7 @@ export interface RetrievedChunk {
   pages: number[];
   startPage: number;
   endPage: number;
+  pageSpans?: PageSpan[];
 }
 
 /** Payload versionado enviado por `POST /api/intelligence/sessions/:id/ask`.
@@ -80,11 +105,22 @@ export interface GroundedAnswer {
 
 /** Evidência resolvida pelo servidor a partir de um `evidenceId` (`E1`,
  * `E2`, ...) validado — o Luna nunca define chunkId/página diretamente; o
- * servidor já conhecia esse mapeamento antes da chamada ao modelo. */
+ * servidor já conhecia esse mapeamento antes da chamada ao modelo.
+ *
+ * `relevantPage` (Sprint 01L.1): página específica dentro de
+ * `startPage`–`endPage` determinada com segurança pelo resolvedor
+ * server-side (`_shared/relevantPageResolver.ts`) — NUNCA definida pelo
+ * Luna (o Structured Output dele não tem campo de página, ver
+ * `lunaClient.ts`). Fica `undefined` sempre que a confiança não for
+ * suficiente (evidência ambígua, chunk legado sem `pageSpans`, ou nenhum
+ * termo distintivo encontrado) — nesse caso o cliente deve continuar
+ * tratando a amplitude inteira `startPage`–`endPage` como a única
+ * informação de página disponível, exatamente como antes desta sprint. */
 export interface AskEvidence {
   evidenceId: string;
   chunkId: string;
   pages: number[];
   startPage: number;
   endPage: number;
+  relevantPage?: number;
 }

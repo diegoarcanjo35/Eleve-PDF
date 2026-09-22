@@ -1,5 +1,5 @@
 import { CHUNK_MAX_CHARS, CHUNK_OVERLAP_RATIO, CHUNK_TARGET_CHARS, CHUNKING_STRATEGY_VERSION } from "./constants";
-import type { DocumentChunk, IngestionPageV1 } from "./types";
+import type { DocumentChunk, IngestionPageV1, PageSpan } from "./types";
 
 /**
  * INVARIANTE DE SEGURANÇA DE CONTEÚDO: todo texto abaixo (páginas, blocos,
@@ -50,6 +50,36 @@ function splitOversizedSegments(segments: Segment[]): Segment[] {
 
 function joinSegments(segments: Segment[]): string {
   return segments.map((s) => s.text).join("\n");
+}
+
+/**
+ * Proveniência granular (Sprint 01L.1): mapeia cada segmento de `segments`
+ * ao intervalo exato que ele ocupa no texto que `joinSegments(segments)`
+ * produziria — mesma aritmética de offset, nunca recalculada de forma
+ * aproximada. Segmentos contíguos da MESMA página são fundidos num único
+ * span (caso comum); uma mudança de página, ou a mesma página reaparecendo
+ * depois de outra (ex.: por causa do overlap), sempre inicia um span novo.
+ * `startOffset` inclusivo, `endOffset` exclusivo — `chunk.text.slice(span.startOffset, span.endOffset)`
+ * sempre reproduz o trecho exato daquela página, incluindo os `\n` internos
+ * quando o span abrange mais de um segmento.
+ */
+function computePageSpans(segments: Segment[]): PageSpan[] {
+  const spans: PageSpan[] = [];
+  let offset = 0;
+  for (let i = 0; i < segments.length; i += 1) {
+    const segment = segments[i]!;
+    const startOffset = offset;
+    const endOffset = startOffset + segment.text.length;
+    const last = spans[spans.length - 1];
+    if (last && last.page === segment.pageNumber && last.endOffset === startOffset) {
+      last.endOffset = endOffset;
+    } else {
+      spans.push({ page: segment.pageNumber, startOffset, endOffset });
+    }
+    offset = endOffset;
+    if (i < segments.length - 1) offset += 1; // separador "\n" de joinSegments
+  }
+  return spans;
 }
 
 /** Cauda de segmentos (blocos inteiros, nunca cortados no meio) do chunk que
@@ -103,6 +133,7 @@ export function chunkDocument(pages: IngestionPageV1[]): DocumentChunk[] {
       endPage: pageNumbers[pageNumbers.length - 1]!,
       pages: pageNumbers,
       chunkingStrategyVersion: CHUNKING_STRATEGY_VERSION,
+      pageSpans: computePageSpans(current),
     });
     return overlapSeed;
   }

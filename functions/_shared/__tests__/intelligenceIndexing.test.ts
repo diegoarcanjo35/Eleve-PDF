@@ -21,6 +21,7 @@ function makeChunk(overrides: Partial<DocumentChunk> = {}): DocumentChunk {
     endPage: 1,
     pages: [1],
     chunkingStrategyVersion: "v1-test",
+    pageSpans: [{ page: 1, startOffset: 0, endOffset: "texto do chunk".length }],
     ...overrides,
   };
 }
