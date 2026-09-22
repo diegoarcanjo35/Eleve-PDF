@@ -24,29 +24,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { absoluteUrl, SEO_NOT_FOUND, SEO_PAGES, SEO_PRIVATE_PAGES, type SeoPageMeta } from "../shared/seo/pages";
 import { buildWebApplicationJsonLd, jsonLdScriptTag } from "../shared/seo/structuredData";
+import { buildSitemapXml, isEleveIaEnabledForBuild, seoPageForBuild } from "./seoBuildHelpers";
 
 const DIST_DIR = resolve("dist");
 
-/**
- * Feature flag da Eleve IA (Sprint 01H) — mesma variável de ambiente que
- * `src/featureFlags.ts` lê via `import.meta.env` dentro do bundle do
- * navegador; aqui é lida via `process.env` porque este script roda em Node
- * puro (`tsx`), fora do pipeline do Vite. Uma única variável, duas formas de
- * leitura conforme o runtime — nunca duas fontes de verdade divergentes.
- * Fail-closed: ausente ou diferente de "true" = desligada.
- */
-const ELEVE_IA_ENABLED = process.env.VITE_ELEVE_IA_ENABLED === "true";
-
-/**
- * Enquanto a Eleve IA estiver desligada, `/conversar-com-pdf` não deve ser
- * indexável nem apontar canonical — mesmo tratamento dado à 404
- * (`SEO_NOT_FOUND` abaixo). Não modifica `SEO_PAGES` (que descreve o estado
- * "ligado"), só a cópia usada para gerar o HTML estático desta rota.
- */
-function seoPageForBuild(page: SeoPageMeta): SeoPageMeta {
-  if (page.path !== "/conversar-com-pdf" || ELEVE_IA_ENABLED) return page;
-  return { ...page, robots: "noindex, nofollow", canonical: false };
-}
+/** Ver `scripts/seoBuildHelpers.ts` (Sprint 01H.1) — lógica pura, testada à
+ * parte em `scripts/__tests__/seoBuildHelpers.test.ts`. A consistência com a
+ * flag do backend (`ELEVE_IA_ENABLED`) é garantida ANTES do build, por
+ * `scripts/validateEleveIaFlag.ts` — este script só lê o lado do frontend. */
+const ELEVE_IA_ENABLED = isEleveIaEnabledForBuild();
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -126,7 +112,7 @@ function main() {
   for (const page of SEO_PAGES) {
     if (page.path === "/") continue;
     const relativePath = `${page.path.replace(/^\//, "")}.html`;
-    writeRouteFile(relativePath, injectMeta(baseHtml, seoPageForBuild(page), true));
+    writeRouteFile(relativePath, injectMeta(baseHtml, seoPageForBuild(page, ELEVE_IA_ENABLED), true));
   }
 
   for (const page of SEO_PRIVATE_PAGES) {
@@ -139,6 +125,13 @@ function main() {
   // não bate em nenhum arquivo estático nem em nenhuma regra de _redirects —
   // sem precisar de nenhuma regra explícita em public/_redirects para isso.
   writeRouteFile("404.html", injectMeta(baseHtml, SEO_NOT_FOUND, false));
+
+  // sitemap.xml (Sprint 01H.1): gerado a partir de SEO_PAGES + a mesma flag
+  // acima, sobrescrevendo a cópia estática que o Vite já colocou em dist/
+  // (copiada de public/sitemap.xml). Nunca mais precisa de edição manual
+  // para refletir o estado da Eleve IA.
+  const sitemapPages = SEO_PAGES.map((page) => seoPageForBuild(page, ELEVE_IA_ENABLED));
+  writeRouteFile("sitemap.xml", buildSitemapXml(sitemapPages));
 
   console.log("HTML estático por rota gerado com sucesso.");
 }

@@ -12,10 +12,15 @@
   <url>
     <loc>https://elevepdf.elevesites.com.br/juntar-pdfs</loc>
   </url>
-  <!-- /conversar-com-pdf removida da Sprint 01H em diante: a Eleve IA está
-       atrás da feature flag ELEVE_IA_ENABLED (ver wrangler.toml e
-       src/featureFlags.ts), desligada por padrão. Reintroduzir esta linha
-       só quando a flag for ativada de verdade em produção. -->
+  <!-- /conversar-com-pdf: a partir da Sprint 01H.1, este arquivo deixou de
+       ser a fonte real do sitemap publicado. scripts/generateSeoHtml.ts
+       gera dist/sitemap.xml automaticamente a partir de shared/seo/pages.ts
+       + a flag ELEVE_IA_ENABLED/VITE_ELEVE_IA_ENABLED (ver
+       scripts/seoBuildHelpers.ts), e SOBRESCREVE a cópia deste arquivo a
+       cada build — a rota volta sozinha quando a flag for ligada de
+       verdade, sem editar este XML. Este arquivo continua aqui só como
+       fallback estático (ex.: `vite preview` sem rodar o pós-build) e
+       reflete o estado padrão do repositório (Eleve IA desligada). -->
   <url>
     <loc>https://elevepdf.elevesites.com.br/privacidade</loc>
   </url>
