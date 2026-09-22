@@ -76,8 +76,12 @@ function installFetchMock() {
   );
 }
 
-function mockSuccessfulExtraction(overallStatus: "ok" | "unsupported" = "ok") {
+function mockSuccessfulExtraction(overallStatus: "ok" | "partial" | "unsupported" = "ok") {
   validateMock.mockReturnValue({ promise: Promise.resolve({ pageCount: 2, structure: {} }) });
+  const page2 =
+    overallStatus === "partial"
+      ? { pageNumber: 2, status: "no-text", blocks: [], pageSize: { width: 1, height: 1 } }
+      : { pageNumber: 2, status: "text", blocks: [{ text: "Conteúdo da página dois.", boundingBox: { x: 0, y: 0, width: 1, height: 1 } }], pageSize: { width: 1, height: 1 } };
   extractMock.mockReturnValue({
     promise: Promise.resolve({
       document: {
@@ -85,7 +89,7 @@ function mockSuccessfulExtraction(overallStatus: "ok" | "unsupported" = "ok") {
         overallStatus,
         pages: [
           { pageNumber: 1, status: "text", blocks: [{ text: "Conteúdo da página um.", boundingBox: { x: 0, y: 0, width: 1, height: 1 } }], pageSize: { width: 1, height: 1 } },
-          { pageNumber: 2, status: "text", blocks: [{ text: "Conteúdo da página dois.", boundingBox: { x: 0, y: 0, width: 1, height: 1 } }], pageSize: { width: 1, height: 1 } },
+          page2,
         ],
       },
     }),
@@ -397,5 +401,91 @@ describe("ConversarComPdfPage", () => {
     expect(screen.getByRole("textbox", { name: /pergunta sobre o documento/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /enviar pergunta/i })).toBeInTheDocument();
     expect(screen.getByRole("log")).toHaveAttribute("aria-live", "polite");
+  });
+
+  describe("documento parcialmente extraído (Sprint 01N — ajuste final)", () => {
+    it("1. partial com texto utilizável continua normalmente para a Eleve IA (sessão/ingest ocorrem)", async () => {
+      mockSuccessfulExtraction("partial");
+      const { container } = renderPage();
+      await reachReadyState(container);
+
+      expect(fetchLog.some((entry) => entry.url === "/api/intelligence/sessions")).toBe(true);
+      expect(fetchLog.some((entry) => entry.url === `/api/intelligence/sessions/${SESSION_ID}/ingest`)).toBe(true);
+    });
+
+    it("2. aviso de extração parcial aparece assim que o documento fica pronto", async () => {
+      mockSuccessfulExtraction("partial");
+      const { container } = renderPage();
+      await reachReadyState(container);
+
+      expect(
+        screen.getByText(/algumas páginas deste pdf não puderam ser lidas/i),
+      ).toBeInTheDocument();
+    });
+
+    it("3/4. aviso permanece visível no estado pronto e depois de uma resposta", async () => {
+      mockSuccessfulExtraction("partial");
+      const { container } = renderPage();
+      await reachReadyState(container);
+      expect(screen.getByText(/algumas páginas deste pdf não puderam ser lidas/i)).toBeInTheDocument();
+
+      await userEvent.type(screen.getByPlaceholderText(/pergunte algo/i), "pergunta");
+      await userEvent.click(screen.getByRole("button", { name: /enviar pergunta/i }));
+      await waitFor(() => expect(screen.getByText("Resposta de teste.")).toBeInTheDocument());
+
+      expect(screen.getByText(/algumas páginas deste pdf não puderam ser lidas/i)).toBeInTheDocument();
+    });
+
+    it("5. trocar de documento remove o aviso de extração parcial", async () => {
+      mockSuccessfulExtraction("partial");
+      const { container } = renderPage();
+      await reachReadyState(container);
+      expect(screen.getByText(/algumas páginas deste pdf não puderam ser lidas/i)).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: /trocar documento/i }));
+
+      expect(screen.queryByText(/algumas páginas deste pdf não puderam ser lidas/i)).not.toBeInTheDocument();
+    });
+
+    it("6. um novo PDF totalmente 'ok' após um documento partial não herda o aviso anterior", async () => {
+      mockSuccessfulExtraction("partial");
+      const { container } = renderPage();
+      await reachReadyState(container);
+      expect(screen.getByText(/algumas páginas deste pdf não puderam ser lidas/i)).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: /trocar documento/i }));
+      mockSuccessfulExtraction("ok");
+      await reachReadyState(container);
+
+      expect(screen.queryByText(/algumas páginas deste pdf não puderam ser lidas/i)).not.toBeInTheDocument();
+    });
+
+    it("7. documento sem texto utilizável ('unsupported') continua bloqueado, mesmo com uma página parcial — nunca confundido com 'partial'", async () => {
+      mockSuccessfulExtraction("unsupported");
+      const { container } = renderPage();
+      await uploadFile(container);
+
+      await waitFor(() => expect(screen.getByText(/ainda não oferece leitura de documentos digitalizados/i)).toBeInTheDocument());
+      expect(fetchLog.some((entry) => entry.url.startsWith("/api/intelligence"))).toBe(false);
+      expect(screen.queryByText(/algumas páginas deste pdf não puderam ser lidas/i)).not.toBeInTheDocument();
+    });
+
+    it("8. aviso de extração parcial tem semântica acessível (role=status, não role=alert)", async () => {
+      mockSuccessfulExtraction("partial");
+      const { container } = renderPage();
+      await reachReadyState(container);
+
+      const notice = screen.getByText(/algumas páginas deste pdf não puderam ser lidas/i);
+      expect(notice.closest('[role="status"]') ?? notice).toHaveAttribute("role", "status");
+      expect(screen.queryByRole("alert", { name: /algumas páginas/i })).not.toBeInTheDocument();
+    });
+
+    it("um documento 'ok' normal nunca mostra o aviso de extração parcial", async () => {
+      mockSuccessfulExtraction("ok");
+      const { container } = renderPage();
+      await reachReadyState(container);
+
+      expect(screen.queryByText(/algumas páginas deste pdf não puderam ser lidas/i)).not.toBeInTheDocument();
+    });
   });
 });

@@ -21,6 +21,13 @@ const STAGE_LABELS: Partial<Record<IntelligenceStage, string>> = {
   preparing: "Preparando a Eleve IA para conversar sobre este documento…",
 };
 
+/** Sprint 01N (ajuste final): aviso não-bloqueante para documentos com
+ * `overallStatus: "partial"` — algumas páginas falharam na extração local,
+ * mas o documento TEM texto utilizável e segue normalmente para a Eleve
+ * IA. Nunca menciona termos técnicos (pdfjs, extração, OCR interno). */
+const PARTIAL_EXTRACTION_NOTICE =
+  "Algumas páginas deste PDF não puderam ser lidas. As respostas podem não considerar todo o conteúdo do documento.";
+
 function nextMessageId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -34,8 +41,18 @@ export default function ConversarComPdfPage() {
     track("tool_open", { tool_id: TOOL_ID });
   }, []);
 
-  const { stage, errorMessage, file, pageCount, viewerBytes, extractProgress, handleFileSelected, reset, ask } =
-    useIntelligenceSession();
+  const {
+    stage,
+    errorMessage,
+    file,
+    pageCount,
+    viewerBytes,
+    extractProgress,
+    partialExtraction,
+    handleFileSelected,
+    reset,
+    ask,
+  } = useIntelligenceSession();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -109,6 +126,11 @@ export default function ConversarComPdfPage() {
               Trocar documento
             </button>
           </div>
+          {partialExtraction && (
+            <p className="notice notice--warning intel-layout__partial-notice" role="status">
+              {PARTIAL_EXTRACTION_NOTICE}
+            </p>
+          )}
           <div className="intel-layout__panes">
             <div className="intel-layout__viewer">
               <DocumentViewerPane
@@ -180,6 +202,12 @@ export default function ConversarComPdfPage() {
               current={extractProgress?.current ?? 0}
               total={extractProgress?.total ?? 0}
             />
+          )}
+
+          {partialExtraction && stage === "preparing" && (
+            <p className="notice notice--warning" role="status">
+              {PARTIAL_EXTRACTION_NOTICE}
+            </p>
           )}
 
           {stage === "unsupported" && (

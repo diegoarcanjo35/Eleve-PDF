@@ -1367,6 +1367,10 @@ a.tool-card:hover {
   flex-shrink: 0;
 }
 
+.intel-layout__partial-notice {
+  flex-shrink: 0;
+}
+
 .intel-layout__panes {
   flex: 1;
   min-height: 0;

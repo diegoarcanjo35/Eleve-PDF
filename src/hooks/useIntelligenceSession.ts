@@ -32,6 +32,15 @@ interface UseIntelligenceSessionResult {
    * para o visualizador local (Sprint 01F). Nunca enviados ao backend. */
   viewerBytes: ArrayBuffer | null;
   extractProgress: IntelligenceExtractProgress | null;
+  /**
+   * Verdadeiro quando `ExtractedDocument.overallStatus === "partial"`
+   * (Sprint 01N — ajuste final): o documento TEM texto utilizável e segue
+   * normalmente para a Eleve IA, mas pelo menos uma página/bloco falhou na
+   * extração local. Nunca bloqueia o fluxo (diferente de `"unsupported"`,
+   * que vira `stage: "unsupported"` e nunca cria sessão) — só um aviso
+   * persistente para a UI, resetado a cada novo upload/`reset()`.
+   */
+  partialExtraction: boolean;
   handleFileSelected: (file: File) => void;
   reset: () => void;
   /**
@@ -70,6 +79,7 @@ export function useIntelligenceSession(): UseIntelligenceSessionResult {
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [viewerBytes, setViewerBytes] = useState<ArrayBuffer | null>(null);
   const [extractProgress, setExtractProgress] = useState<IntelligenceExtractProgress | null>(null);
+  const [partialExtraction, setPartialExtraction] = useState(false);
 
   const sessionIdRef = useRef<string | null>(null);
   const capabilityRef = useRef<string | null>(null);
@@ -85,6 +95,7 @@ export function useIntelligenceSession(): UseIntelligenceSessionResult {
     setPageCount(null);
     setViewerBytes(null);
     setExtractProgress(null);
+    setPartialExtraction(false);
   }, []);
 
   const handleFileSelected = useCallback((selected: File) => {
@@ -96,6 +107,7 @@ export function useIntelligenceSession(): UseIntelligenceSessionResult {
     setViewerBytes(null);
     setExtractProgress(null);
     setErrorMessage(null);
+    setPartialExtraction(false);
     setStage("validating");
     track("intel_upload_started", { tool_id: TOOL_ID });
 
@@ -127,6 +139,10 @@ export function useIntelligenceSession(): UseIntelligenceSessionResult {
           setStage("unsupported");
           track("intel_document_unsupported", { tool_id: TOOL_ID });
           return;
+        }
+
+        if (extracted.overallStatus === "partial") {
+          setPartialExtraction(true);
         }
 
         setStage("preparing");
@@ -169,5 +185,16 @@ export function useIntelligenceSession(): UseIntelligenceSessionResult {
     }
   }, []);
 
-  return { stage, errorMessage, file, pageCount, viewerBytes, extractProgress, handleFileSelected, reset, ask };
+  return {
+    stage,
+    errorMessage,
+    file,
+    pageCount,
+    viewerBytes,
+    extractProgress,
+    partialExtraction,
+    handleFileSelected,
+    reset,
+    ask,
+  };
 }
