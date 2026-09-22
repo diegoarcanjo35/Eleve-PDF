@@ -6,7 +6,7 @@ import { getAvailableTools } from "@/toolsRegistry";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { track } from "@/analytics/client";
 import { findSeoPage } from "@shared/seo/pages";
-import { ELEVE_IA_ENABLED } from "@/featureFlags";
+import { ELEVE_IA_ENABLED, ELEVE_IA_PUBLIC } from "@/featureFlags";
 
 const PAGE_META = findSeoPage("/")!;
 
@@ -61,7 +61,7 @@ export default function Home() {
           </div>
         </section>
 
-        {ELEVE_IA_ENABLED && (
+        {ELEVE_IA_ENABLED && ELEVE_IA_PUBLIC && (
           <section className="section intel-promo" aria-labelledby="intel-promo-title">
             <div className="intel-promo__text">
               <p className="section__kicker">Novidade</p>

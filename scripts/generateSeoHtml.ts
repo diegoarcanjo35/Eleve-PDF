@@ -24,7 +24,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { absoluteUrl, SEO_NOT_FOUND, SEO_PAGES, SEO_PRIVATE_PAGES, type SeoPageMeta } from "../shared/seo/pages";
 import { buildWebApplicationJsonLd, jsonLdScriptTag } from "../shared/seo/structuredData";
-import { buildSitemapXml, isEleveIaEnabledForBuild, seoPageForBuild } from "./seoBuildHelpers";
+import { buildSitemapXml, isEleveIaEnabledForBuild, isEleveIaPublicForBuild, seoPageForBuild } from "./seoBuildHelpers";
 
 const DIST_DIR = resolve("dist");
 
@@ -33,6 +33,9 @@ const DIST_DIR = resolve("dist");
  * flag do backend (`ELEVE_IA_ENABLED`) é garantida ANTES do build, por
  * `scripts/validateEleveIaFlag.ts` — este script só lê o lado do frontend. */
 const ELEVE_IA_ENABLED = isEleveIaEnabledForBuild();
+/** Ver `scripts/seoBuildHelpers.ts` (Sprint 01P) — modo piloto fechado vs.
+ * público, independente de `ELEVE_IA_ENABLED`. */
+const ELEVE_IA_PUBLIC = isEleveIaPublicForBuild();
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -112,7 +115,7 @@ function main() {
   for (const page of SEO_PAGES) {
     if (page.path === "/") continue;
     const relativePath = `${page.path.replace(/^\//, "")}.html`;
-    writeRouteFile(relativePath, injectMeta(baseHtml, seoPageForBuild(page, ELEVE_IA_ENABLED), true));
+    writeRouteFile(relativePath, injectMeta(baseHtml, seoPageForBuild(page, ELEVE_IA_ENABLED, ELEVE_IA_PUBLIC), true));
   }
 
   for (const page of SEO_PRIVATE_PAGES) {
@@ -130,7 +133,7 @@ function main() {
   // acima, sobrescrevendo a cópia estática que o Vite já colocou em dist/
   // (copiada de public/sitemap.xml). Nunca mais precisa de edição manual
   // para refletir o estado da Eleve IA.
-  const sitemapPages = SEO_PAGES.map((page) => seoPageForBuild(page, ELEVE_IA_ENABLED));
+  const sitemapPages = SEO_PAGES.map((page) => seoPageForBuild(page, ELEVE_IA_ENABLED, ELEVE_IA_PUBLIC));
   writeRouteFile("sitemap.xml", buildSitemapXml(sitemapPages));
 
   console.log("HTML estático por rota gerado com sucesso.");

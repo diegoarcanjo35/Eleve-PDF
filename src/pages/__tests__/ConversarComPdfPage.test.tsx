@@ -488,4 +488,59 @@ describe("ConversarComPdfPage", () => {
       expect(screen.queryByText(/algumas páginas deste pdf não puderam ser lidas/i)).not.toBeInTheDocument();
     });
   });
+
+  describe("intel_source_clicked (Sprint 01P)", () => {
+    it("clique na fonte só envia o evento com consentimento aceito, sem dado sensível no payload", async () => {
+      setConsent("accepted");
+      mockSuccessfulExtraction();
+      askResponse = {
+        status: 200,
+        body: {
+          sessionId: SESSION_ID,
+          answer: "Resposta.",
+          insufficientEvidence: false,
+          evidence: [{ evidenceId: "E1", chunkId: `${SESSION_ID}:1`, pages: [2], startPage: 2, endPage: 2 }],
+        },
+      };
+      const { container } = renderPage();
+      await reachReadyState(container);
+      await userEvent.type(screen.getByPlaceholderText(/pergunte algo/i), "pergunta");
+      await userEvent.click(screen.getByRole("button", { name: /enviar pergunta/i }));
+      await waitFor(() => expect(screen.getByText("Página 2")).toBeInTheDocument());
+
+      await userEvent.click(screen.getByText("Página 2"));
+
+      const sourceClickCalls = fetchLog.filter(
+        (entry) => entry.url === "/api/analytics/event" && (entry.body as { event?: string })?.event === "intel_source_clicked",
+      );
+      expect(sourceClickCalls).toHaveLength(1);
+      const serialized = JSON.stringify(sourceClickCalls[0]!.body);
+      expect(serialized).not.toContain(`${SESSION_ID}:1`); // chunkId
+      expect(serialized).not.toContain(SESSION_ID);
+      expect(serialized).not.toMatch(/"page"|startPage|endPage/);
+    });
+
+    it("clique na fonte sem consentimento aceito nunca chama /api/analytics/event", async () => {
+      __resetConsentForTests(); // consentimento não decidido — track() é no-op
+      mockSuccessfulExtraction();
+      askResponse = {
+        status: 200,
+        body: {
+          sessionId: SESSION_ID,
+          answer: "Resposta.",
+          insufficientEvidence: false,
+          evidence: [{ evidenceId: "E1", chunkId: `${SESSION_ID}:1`, pages: [2], startPage: 2, endPage: 2 }],
+        },
+      };
+      const { container } = renderPage();
+      await reachReadyState(container);
+      await userEvent.type(screen.getByPlaceholderText(/pergunte algo/i), "pergunta");
+      await userEvent.click(screen.getByRole("button", { name: /enviar pergunta/i }));
+      await waitFor(() => expect(screen.getByText("Página 2")).toBeInTheDocument());
+
+      await userEvent.click(screen.getByText("Página 2"));
+
+      expect(fetchLog.some((entry) => entry.url === "/api/analytics/event")).toBe(false);
+    });
+  });
 });

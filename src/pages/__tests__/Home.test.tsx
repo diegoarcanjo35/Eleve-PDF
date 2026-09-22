@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -61,5 +61,48 @@ describe("Home", () => {
     expect(card?.tagName).toBe("DIV");
     expect(card).toHaveAttribute("aria-disabled", "true");
     expect(card?.querySelector("a")).toBeNull();
+  });
+});
+
+describe("Home — modo piloto/público (Sprint 01P)", () => {
+  afterEach(() => {
+    vi.doUnmock("@/featureFlags");
+    vi.resetModules();
+  });
+
+  it("ligada mas NÃO pública (piloto fechado): CTA continua ausente da Home", async () => {
+    vi.resetModules();
+    vi.doMock("@/featureFlags", () => ({ ELEVE_IA_ENABLED: true, ELEVE_IA_PUBLIC: false }));
+    const { default: HomePiloto } = await import("../Home");
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<HomePiloto />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: /converse com seu pdf usando a eleve ia/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ligada E pública: CTA aparece na Home", async () => {
+    vi.resetModules();
+    vi.doMock("@/featureFlags", () => ({ ELEVE_IA_ENABLED: true, ELEVE_IA_PUBLIC: true }));
+    const { default: HomePublica } = await import("../Home");
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<HomePublica />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: /converse com seu pdf usando a eleve ia/i }),
+    ).toBeInTheDocument();
   });
 });

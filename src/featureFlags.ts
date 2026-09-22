@@ -18,3 +18,20 @@
  * `true` aqui.
  */
 export const ELEVE_IA_ENABLED = import.meta.env.VITE_ELEVE_IA_ENABLED === "true";
+
+/**
+ * `VITE_ELEVE_IA_PUBLIC` (Sprint 01P — preparação do piloto controlado) —
+ * separa "funcionalidade tecnicamente habilitada" (`ELEVE_IA_ENABLED` acima)
+ * de "divulgação pública/indexação". Controla SÓ o CTA/promoção na Home (ver
+ * `src/pages/Home.tsx`) — a rota `/conversar-com-pdf` continua funcional
+ * para quem tiver o link e passar pelo Cloudflare Access, mesmo com esta
+ * flag desligada (modo "piloto fechado"). Irrelevante quando
+ * `ELEVE_IA_ENABLED` é `false` — o kill switch sempre vence (ver
+ * `_shared/featureFlags.ts` no backend, que nunca lê esta flag).
+ *
+ * Mesmo par de leitura de `ELEVE_IA_ENABLED`: `import.meta.env` aqui,
+ * `process.env` em `scripts/seoBuildHelpers.ts` — uma única variável, duas
+ * formas de leitura conforme o runtime. Fail-closed: ausente ou diferente
+ * de "true" = não pública (piloto fechado por padrão).
+ */
+export const ELEVE_IA_PUBLIC = import.meta.env.VITE_ELEVE_IA_PUBLIC === "true";

@@ -29,6 +29,12 @@ export const ALLOWED_EVENTS = [
   "intel_document_unsupported",
   "intel_question_sent",
   "intel_answer_received",
+  // Sprint 01P — clique numa fonte/badge de evidência. Mesma invariante:
+  // nunca chunkId, sessionId, texto, pergunta, resposta ou página exata — só
+  // `tool_id`. Granularidade extra (ex.: se a página resolvida era exata ou
+  // uma amplitude) foi deliberadamente adiada: exigiria migration nova em
+  // `migrations/` (Analytics), fora do escopo desta sprint.
+  "intel_source_clicked",
 ] as const;
 
 export type AnalyticsEventType = (typeof ALLOWED_EVENTS)[number];
@@ -104,6 +110,7 @@ export type OversizedPartsBucket = (typeof ALLOWED_OVERSIZED_PARTS_BUCKETS)[numb
 /** Faixas de duração de processamento, nunca milissegundos exatos. */
 export const ALLOWED_DURATION_BUCKETS = ["<1s", "1-3s", "3-10s", "10-30s", "30s+"] as const;
 export type DurationBucket = (typeof ALLOWED_DURATION_BUCKETS)[number];
+
 
 export function durationMsToBucket(durationMs: number): DurationBucket {
   if (durationMs < 1000) return "<1s";

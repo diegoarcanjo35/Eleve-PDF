@@ -138,3 +138,22 @@ export const RATE_LIMIT_INGEST_MAX = 5;
 export const RATE_LIMIT_RETRIEVE_MAX = 20;
 /** HIPÓTESE INICIAL — mais restritivo que retrieve: maior custo real (Luna). */
 export const RATE_LIMIT_ASK_MAX = 10;
+
+// --- Cleanup automático de sessões expiradas (Sprint 01P) ---
+/**
+ * HIPÓTESE INICIAL — quantas sessões expiradas o cleanup processa por
+ * invocação. Conservador de propósito: mantém cada execução rápida e barata
+ * (poucas queries D1 + poucas chamadas Vectorize), nunca um scan/delete
+ * ilimitado. Sessões restantes além deste lote são pegas na próxima
+ * invocação — o cleanup nunca precisa terminar tudo de uma vez (ver
+ * `functions/_shared/intelligenceCleanup.ts`).
+ */
+export const CLEANUP_SESSION_BATCH_SIZE = 25;
+/**
+ * Idade mínima (a partir de `window_start`) para uma linha de
+ * `intelligence_rate_limit_windows` ser elegível para limpeza — bem acima de
+ * `RATE_LIMIT_WINDOW_MS` (1 minuto) de propósito, para nunca apagar uma
+ * janela ainda potencialmente em uso. Não é requisito apagar janelas
+ * recentes; este valor só evita crescimento indefinido da tabela.
+ */
+export const CLEANUP_RATE_LIMIT_WINDOW_RETENTION_MS = 24 * 60 * 60 * 1000; // 24 horas

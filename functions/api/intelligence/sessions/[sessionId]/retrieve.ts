@@ -11,11 +11,12 @@ import { enforceDistributedRateLimit } from "../../../../_shared/distributedRate
 import { verifySessionCapability } from "../../../../_shared/sessionCapability";
 import { getSession, type IntelligenceD1 } from "../../../../_shared/intelligenceDb";
 import { retrieveChunks } from "../../../../_shared/intelligenceRetrieval";
-import { logIntelligenceTelemetry } from "../../../../_shared/intelligenceTelemetry";
+import { logIntelligenceError, logIntelligenceTelemetry } from "../../../../_shared/intelligenceTelemetry";
+import { checkIntelAccess, type IntelAccessEnv } from "../../../../_shared/pilotAccess";
 import { isExpired } from "../../../../_shared/intelligenceSession";
 import { isEleveIaEnabled, type EleveIaFlagEnv } from "../../../../_shared/featureFlags";
 
-interface Env extends EleveIaFlagEnv {
+interface Env extends EleveIaFlagEnv, IntelAccessEnv {
   INTEL_DB: IntelligenceD1;
   AI: Ai;
   VECTORIZE: Vectorize;
@@ -26,6 +27,7 @@ interface Env extends EleveIaFlagEnv {
 }
 
 function genericError(status: number): Response {
+  logIntelligenceError({ route: "retrieve", status });
   return new Response(null, { status });
 }
 
@@ -66,6 +68,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!isAllowedRequestOrigin(origin, host, { allowLocalDev, allowPagesPreview })) {
     return genericError(403);
   }
+
+  // Segunda camada de acesso do piloto (Sprint 01P) — ver ../../sessions.ts.
+  const access = await checkIntelAccess(request, env);
+  if (!access.allowed) return genericError(401);
 
   const contentType = request.headers.get("Content-Type") ?? "";
   if (!contentType.toLowerCase().includes("application/json")) {

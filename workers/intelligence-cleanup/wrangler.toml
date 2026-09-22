@@ -1,0 +1,38 @@
+# Worker dedicado e mínimo para o cleanup automático de sessões expiradas da
+# Inteligência Documental (Sprint 01P) — ver `index.ts` e
+# `functions/_shared/intelligenceCleanup.ts` para o racional completo.
+#
+# NÃO DEPLOYADO NESTA SPRINT. Preparado para um gate posterior, que também
+# precisa aplicar as migrations 0004-0006 em produção antes deste Worker
+# fazer sentido operacionalmente (as tabelas/colunas que ele lê/escreve não
+# existem em produção ainda — ver relatório da Sprint 01P).
+#
+# Reaproveita os MESMOS recursos D1/Vectorize do projeto Pages principal
+# (`wrangler.toml` da raiz) — mesmos database_id/index_name, nenhuma
+# infraestrutura nova. É um Worker (não Pages) porque Cloudflare Pages
+# Functions não suporta `scheduled`/cron nativamente — só um Worker "puro"
+# pode declarar `[triggers] crons`.
+name = "eleve-pdf-intelligence-cleanup"
+main = "index.ts"
+compatibility_date = "2026-01-01"
+
+# Cadência HIPÓTESE INICIAL — a cada 10 minutos. TTL da sessão é 30 minutos
+# (`SESSION_TTL_MS`, shared/intelligence/constants.ts); rodar a cada 10min
+# garante que uma sessão expirada nunca fica mais que ~10min além do seu TTL
+# antes de ser processada, sem gerar tráfego excessivo de cron para o volume
+# esperado de um piloto de poucas pessoas. Nunca validado por uso real.
+[triggers]
+crons = ["*/10 * * * *"]
+
+# Mesmo D1 de Inteligência Documental usado em produção pelo projeto Pages
+# (ver `wrangler.toml` da raiz, `[[d1_databases]]` com binding INTEL_DB).
+[[d1_databases]]
+binding = "INTEL_DB"
+database_name = "elevepdf-intelligence"
+database_id = "c201632f-d197-4623-8bb5-d05ff1985b8f"
+
+# Mesmo índice Vectorize usado em produção pelo projeto Pages (ver
+# `wrangler.toml` da raiz, `[[vectorize]]`).
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "elevepdf-conversar-pdf-embeddings"

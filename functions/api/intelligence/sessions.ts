@@ -9,8 +9,10 @@ import { createSession, type IntelligenceD1 } from "../../_shared/intelligenceDb
 import { computeExpiresAt, generateSessionId } from "../../_shared/intelligenceSession";
 import { generateSessionCapability, hashCapability } from "../../_shared/sessionCapability";
 import { isEleveIaEnabled, type EleveIaFlagEnv } from "../../_shared/featureFlags";
+import { logIntelligenceError } from "../../_shared/intelligenceTelemetry";
+import { checkIntelAccess, type IntelAccessEnv } from "../../_shared/pilotAccess";
 
-interface Env extends EleveIaFlagEnv {
+interface Env extends EleveIaFlagEnv, IntelAccessEnv {
   INTEL_DB: IntelligenceD1;
   /** Secret de assinatura HMAC do rate limit distribuído (Sprint 01E.1) —
    * nunca commitado, nunca logado, nunca enviado ao Analytics. Ausente =>
@@ -26,6 +28,7 @@ interface Env extends EleveIaFlagEnv {
 }
 
 function genericError(status: number): Response {
+  logIntelligenceError({ route: "sessions", status });
   return new Response(null, { status });
 }
 
@@ -57,6 +60,12 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!isAllowedRequestOrigin(origin, host, { allowLocalDev, allowPagesPreview })) {
     return genericError(403);
   }
+
+  // Segunda camada de acesso do piloto (Sprint 01P) — só exigida quando
+  // INTEL_ACCESS_REQUIRED === "true" (nunca nesta sprint); ver
+  // `_shared/pilotAccess.ts`. Nunca substitui a capability de sessão abaixo.
+  const access = await checkIntelAccess(request, env);
+  if (!access.allowed) return genericError(401);
 
   const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
 

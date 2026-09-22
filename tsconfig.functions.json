@@ -11,5 +11,5 @@
     "noEmit": true,
     "strict": true
   },
-  "include": ["functions/**/*.ts", "shared/**/*.ts"]
+  "include": ["functions/**/*.ts", "shared/**/*.ts", "workers/**/*.ts"]
 }

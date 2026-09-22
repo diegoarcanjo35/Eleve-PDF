@@ -17,11 +17,12 @@ import { getSession, type IntelligenceD1 } from "../../../../_shared/intelligenc
 import { retrieveChunks } from "../../../../_shared/intelligenceRetrieval";
 import { askLuna } from "../../../../_shared/lunaClient";
 import { resolveRelevantPage } from "../../../../_shared/relevantPageResolver";
-import { logIntelligenceTelemetry } from "../../../../_shared/intelligenceTelemetry";
+import { logIntelligenceError, logIntelligenceOutcome, logIntelligenceTelemetry } from "../../../../_shared/intelligenceTelemetry";
+import { checkIntelAccess, type IntelAccessEnv } from "../../../../_shared/pilotAccess";
 import { isExpired } from "../../../../_shared/intelligenceSession";
 import { isEleveIaEnabled, type EleveIaFlagEnv } from "../../../../_shared/featureFlags";
 
-interface Env extends EleveIaFlagEnv {
+interface Env extends EleveIaFlagEnv, IntelAccessEnv {
   INTEL_DB: IntelligenceD1;
   AI: Ai;
   VECTORIZE: Vectorize;
@@ -35,6 +36,7 @@ interface Env extends EleveIaFlagEnv {
 }
 
 function genericError(status: number): Response {
+  logIntelligenceError({ route: "ask", status });
   return new Response(null, { status });
 }
 
@@ -111,6 +113,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!isAllowedRequestOrigin(origin, host, { allowLocalDev, allowPagesPreview })) {
     return genericError(403);
   }
+
+  // Segunda camada de acesso do piloto (Sprint 01P) — ver ../../sessions.ts.
+  const access = await checkIntelAccess(request, env);
+  if (!access.allowed) return genericError(401);
 
   const contentType = request.headers.get("Content-Type") ?? "";
   if (!contentType.toLowerCase().includes("application/json")) {
@@ -198,6 +204,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   if (outcome.indexStatus === "possibly_propagating") {
     // Nenhum custo de Luna aqui — nunca finge "sem informação relevante".
+    logIntelligenceOutcome({ route: "ask", indexStatus: "possibly_propagating" });
     return json({ sessionId, status: "possibly_propagating" }, 202);
   }
 
@@ -208,6 +215,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     // chama o Luna — o resultado já é conhecido (nenhuma evidência
     // disponível), então gastar uma chamada paga seria desperdício de
     // custo previsível sem nenhum ganho de qualidade.
+    logIntelligenceOutcome({ route: "ask", insufficientEvidence: true, indexStatus: "settled" });
     return json({
       sessionId,
       answer: null,
@@ -275,6 +283,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       totalTokens: usage.totalTokens,
     });
 
+    logIntelligenceOutcome({ route: "ask", insufficientEvidence: answer.insufficientEvidence, indexStatus: "settled" });
     return json({
       sessionId,
       answer: answer.answer,

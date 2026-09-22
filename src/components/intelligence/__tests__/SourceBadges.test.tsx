@@ -3,6 +3,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SourceBadges } from "../SourceBadges";
 
+const trackMock = vi.fn();
+vi.mock("@/analytics/client", () => ({ track: (...args: unknown[]) => trackMock(...args) }));
+
 describe("SourceBadges", () => {
   it("11. mostra as páginas reais devolvidas pelo backend, nunca inventadas", () => {
     render(
@@ -100,5 +103,20 @@ describe("SourceBadges", () => {
     );
     expect(screen.getByText("Página 5")).toBeInTheDocument();
     expect(screen.queryByText(/fonte:/)).not.toBeInTheDocument();
+  });
+
+  it("Sprint 01P: clique numa fonte dispara intel_source_clicked, só com tool_id — sem chunkId/sessionId/página", async () => {
+    trackMock.mockClear();
+    const user = userEvent.setup();
+    render(
+      <SourceBadges
+        evidence={[{ evidenceId: "E1", chunkId: "s:0", pages: [3], startPage: 3, endPage: 3 }]}
+        onNavigateToPage={() => {}}
+      />,
+    );
+    await user.click(screen.getByText("Página 3"));
+
+    expect(trackMock).toHaveBeenCalledTimes(1);
+    expect(trackMock).toHaveBeenCalledWith("intel_source_clicked", { tool_id: "conversar-com-pdf" });
   });
 });

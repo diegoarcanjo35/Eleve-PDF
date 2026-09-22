@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onRequestPost } from "../ask";
 import { __resetRateLimitStateForTests } from "../../../../../_shared/rateLimit";
+import { __resetAccessJwksCacheForTests } from "../../../../../_shared/accessAuth";
 import {
   ASK_CONTRACT_VERSION,
   EMBEDDING_DIMENSIONS,
@@ -98,7 +99,16 @@ function mockLunaFailure(status = 500) {
 
 function callAsk(
   sessionId: string,
-  env: { INTEL_DB: unknown; AI?: unknown; VECTORIZE?: unknown; OPENAI_API_KEY?: string; RATE_LIMIT_HMAC_KEY?: string },
+  env: {
+    INTEL_DB: unknown;
+    AI?: unknown;
+    VECTORIZE?: unknown;
+    OPENAI_API_KEY?: string;
+    RATE_LIMIT_HMAC_KEY?: string;
+    INTEL_ACCESS_REQUIRED?: string;
+    INTEL_ACCESS_TEAM_DOMAIN?: string;
+    INTEL_ACCESS_AUD?: string;
+  },
   body: unknown,
   overrides?: Partial<Record<string, string>>,
   rawBody?: string,
@@ -682,5 +692,149 @@ describe("POST /api/intelligence/sessions/:sessionId/ask", () => {
       lastStatus = response.status;
     }
     expect(lastStatus).toBe(429);
+  });
+
+  describe("Cloudflare Access do piloto (Sprint 01P) — segunda camada, nunca substitui a capability", () => {
+    const ACCESS_TEAM_DOMAIN = "eleve-sites.cloudflareaccess.com";
+    const ACCESS_AUD = "test-intel-pilot-audience";
+    const ACCESS_KID = "test-key-1";
+
+    // O JWKS é cacheado por 5min em accessAuth.ts — sem resetar entre
+    // testes, um teste posterior reaproveitaria a chave pública do teste
+    // anterior (errada para a nova chave privada gerada aqui).
+    beforeEach(() => {
+      __resetAccessJwksCacheForTests();
+    });
+
+    function base64Url(bytes: Uint8Array): string {
+      let binary = "";
+      bytes.forEach((b) => (binary += String.fromCharCode(b)));
+      return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    }
+    function base64UrlJson(obj: unknown): string {
+      return base64Url(new TextEncoder().encode(JSON.stringify(obj)));
+    }
+    async function makeAccessKeyPair(): Promise<CryptoKeyPair> {
+      return (await crypto.subtle.generateKey(
+        { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+        true,
+        ["sign", "verify"],
+      )) as CryptoKeyPair;
+    }
+    async function signAccessJwt(privateKey: CryptoKey, payload: Record<string, unknown>): Promise<string> {
+      const headerB64 = base64UrlJson({ alg: "RS256", typ: "JWT", kid: ACCESS_KID });
+      const payloadB64 = base64UrlJson(payload);
+      const signature = await crypto.subtle.sign(
+        "RSASSA-PKCS1-v1_5",
+        privateKey,
+        new TextEncoder().encode(`${headerB64}.${payloadB64}`),
+      );
+      return `${headerB64}.${payloadB64}.${base64Url(new Uint8Array(signature))}`;
+    }
+    async function stubAccessJwks(publicKey: CryptoKey, fetchMock: ReturnType<typeof vi.fn>) {
+      const jwk = await crypto.subtle.exportKey("jwk", publicKey);
+      const originalFetch = fetchMock.getMockImplementation() as
+        | ((url: string, init?: RequestInit) => Promise<Response>)
+        | undefined;
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (typeof url === "string" && url.includes("/cdn-cgi/access/certs")) {
+          return new Response(JSON.stringify({ keys: [{ ...jwk, kid: ACCESS_KID }] }), { status: 200 });
+        }
+        return originalFetch!(url, init);
+      });
+    }
+    async function validAccessJwt(privateKey: CryptoKey): Promise<string> {
+      return signAccessJwt(privateKey, {
+        iss: `https://${ACCESS_TEAM_DOMAIN}`,
+        aud: [ACCESS_AUD],
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        email: "diego@example.com",
+      });
+    }
+
+    it("INTEL_ACCESS_REQUIRED ausente: comportamento idêntico a antes desta sprint (capability sozinha já basta)", async () => {
+      const { db, sessions, chunks } = makeFakeIntelligenceDb();
+      const { sessionId, capability } = await seedReadySession(sessions);
+      seedChunk(chunks, sessionId, 0, "conteúdo", [1]);
+      const vectorize = makeFakeVectorize([{ id: `${sessionId}:0`, sessionId, score: 0.9 }]);
+      mockLunaSuccess({ answer: "x", evidenceIds: [], insufficientEvidence: false });
+
+      const response = await callAsk(sessionId, { INTEL_DB: db, VECTORIZE: vectorize }, validQuestion(), authHeader(capability));
+      expect(response.status).toBe(200);
+    });
+
+    it("Access exigido, sem JWT do Access: bloqueado (401) mesmo com capability correta", async () => {
+      const { db, sessions, chunks } = makeFakeIntelligenceDb();
+      const { sessionId, capability } = await seedReadySession(sessions);
+      seedChunk(chunks, sessionId, 0, "conteúdo", [1]);
+      const vectorize = makeFakeVectorize([{ id: `${sessionId}:0`, sessionId, score: 0.9 }]);
+      const fetchMock = mockLunaSuccess({ answer: "x", evidenceIds: [], insufficientEvidence: false });
+
+      const response = await callAsk(
+        sessionId,
+        {
+          INTEL_DB: db,
+          VECTORIZE: vectorize,
+          INTEL_ACCESS_REQUIRED: "true",
+          INTEL_ACCESS_TEAM_DOMAIN: ACCESS_TEAM_DOMAIN,
+          INTEL_ACCESS_AUD: ACCESS_AUD,
+        },
+        validQuestion(),
+        authHeader(capability), // capability correta, mas sem Cf-Access-Jwt-Assertion
+      );
+      expect(response.status).toBe(401);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("Access exigido e válido, mas SEM capability: ainda bloqueado (401) — Access nunca substitui a capability", async () => {
+      const { db, sessions, chunks } = makeFakeIntelligenceDb();
+      const { sessionId } = await seedReadySession(sessions);
+      seedChunk(chunks, sessionId, 0, "conteúdo", [1]);
+      const vectorize = makeFakeVectorize([{ id: `${sessionId}:0`, sessionId, score: 0.9 }]);
+      const fetchMock = mockLunaSuccess({ answer: "x", evidenceIds: [], insufficientEvidence: false });
+      const { publicKey, privateKey } = await makeAccessKeyPair();
+      await stubAccessJwks(publicKey, fetchMock);
+      const jwt = await validAccessJwt(privateKey);
+
+      const response = await callAsk(
+        sessionId,
+        {
+          INTEL_DB: db,
+          VECTORIZE: vectorize,
+          INTEL_ACCESS_REQUIRED: "true",
+          INTEL_ACCESS_TEAM_DOMAIN: ACCESS_TEAM_DOMAIN,
+          INTEL_ACCESS_AUD: ACCESS_AUD,
+        },
+        validQuestion(),
+        { "Cf-Access-Jwt-Assertion": jwt }, // sem Authorization: Bearer <capability>
+      );
+      expect(response.status).toBe(401);
+      expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("openai.com"), expect.anything());
+    });
+
+    it("Access exigido e válido, E capability correta: autorizado (as duas camadas juntas funcionam)", async () => {
+      const { db, sessions, chunks } = makeFakeIntelligenceDb();
+      const { sessionId, capability } = await seedReadySession(sessions);
+      seedChunk(chunks, sessionId, 0, "conteúdo", [1]);
+      const vectorize = makeFakeVectorize([{ id: `${sessionId}:0`, sessionId, score: 0.9 }]);
+      const fetchMock = mockLunaSuccess({ answer: "x", evidenceIds: [], insufficientEvidence: false });
+      const { publicKey, privateKey } = await makeAccessKeyPair();
+      await stubAccessJwks(publicKey, fetchMock);
+      const jwt = await validAccessJwt(privateKey);
+
+      const response = await callAsk(
+        sessionId,
+        {
+          INTEL_DB: db,
+          VECTORIZE: vectorize,
+          INTEL_ACCESS_REQUIRED: "true",
+          INTEL_ACCESS_TEAM_DOMAIN: ACCESS_TEAM_DOMAIN,
+          INTEL_ACCESS_AUD: ACCESS_AUD,
+        },
+        validQuestion(),
+        { "Cf-Access-Jwt-Assertion": jwt, ...authHeader(capability) },
+      );
+      expect(response.status).toBe(200);
+    });
   });
 });

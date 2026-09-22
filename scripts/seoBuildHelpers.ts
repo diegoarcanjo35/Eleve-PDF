@@ -24,14 +24,36 @@ export function isEleveIaEnabledForBuild(env: NodeJS.ProcessEnv = process.env): 
 }
 
 /**
- * Enquanto a Eleve IA estiver desligada, `/conversar-com-pdf` não deve ser
- * indexável nem apontar canonical — mesmo tratamento dado à 404
- * (`SEO_NOT_FOUND`). Não modifica `SEO_PAGES` (que descreve o estado
- * "ligado"), só a cópia usada para gerar o HTML estático e o sitemap desta
- * rota.
+ * `VITE_ELEVE_IA_PUBLIC` (Sprint 01P — preparação do piloto) — separa
+ * conceitualmente "funcionalidade tecnicamente habilitada"
+ * (`VITE_ELEVE_IA_ENABLED`) de "divulgação pública/indexação". Um piloto
+ * fechado (convidados via Cloudflare Access) precisa da rota FUNCIONAL sem
+ * estar promovida na Home nem indexável — daí a flag separada, em vez de
+ * reaproveitar `VITE_ELEVE_IA_ENABLED` para as duas coisas.
+ *
+ * Ausente/diferente de "true" = não pública (mais restritivo por padrão,
+ * mesmo padrão fail-closed de `isEleveIaEnabledForBuild`). Sem par no
+ * backend de propósito — é uma decisão de SEO/promoção de UI, nunca uma
+ * barreira de segurança (essa continua sendo `ELEVE_IA_ENABLED` do backend
+ * + Cloudflare Access, ver `_shared/pilotAccess.ts`).
  */
-export function seoPageForBuild(page: SeoPageMeta, eleveIaEnabled: boolean): SeoPageMeta {
-  if (page.path !== "/conversar-com-pdf" || eleveIaEnabled) return page;
+export function isEleveIaPublicForBuild(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.VITE_ELEVE_IA_PUBLIC === "true";
+}
+
+/**
+ * Enquanto a Eleve IA estiver desligada OU ligada mas não pública (modo
+ * piloto fechado, Sprint 01P), `/conversar-com-pdf` não deve ser indexável
+ * nem apontar canonical — mesmo tratamento dado à 404 (`SEO_NOT_FOUND`).
+ * Não modifica `SEO_PAGES` (que descreve o estado "ligado E público"), só a
+ * cópia usada para gerar o HTML estático e o sitemap desta rota.
+ *
+ * `eleveIaPublic` tem default `true` de propósito — preserva exatamente o
+ * comportamento anterior a esta sprint para quem chama com só 2 argumentos
+ * (ligada = totalmente pública, como sempre foi até aqui).
+ */
+export function seoPageForBuild(page: SeoPageMeta, eleveIaEnabled: boolean, eleveIaPublic: boolean = true): SeoPageMeta {
+  if (page.path !== "/conversar-com-pdf" || (eleveIaEnabled && eleveIaPublic)) return page;
   return { ...page, robots: "noindex, nofollow", canonical: false };
 }
 
